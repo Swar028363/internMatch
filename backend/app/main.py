@@ -1,11 +1,10 @@
-# app/main.py
-
 from fastapi import FastAPI
-from app.database import Base, engine
-from app.auth import router as auth_router
-from app.user import router as user_router
 
-Base.metadata.create_all(engine)
+from app.database.session import Base, engine
+from app.api.auth import router as auth_router
+from app.api.users import router as user_router
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="InternMatch API",
