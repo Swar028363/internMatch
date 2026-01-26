@@ -1,6 +1,7 @@
 import time
 import jwt
 from pathlib import Path
+from jwt import InvalidTokenError
 from passlib.context import CryptContext
 
 JWT_ALGORITHM = "EdDSA"
@@ -37,3 +38,19 @@ def create_access_token(user_id: int, role: str) -> str:
         "exp": int(time.time()) + JWT_EXPIRE_SECONDS,
     }
     return jwt.encode(payload, JWT_PRIVATE_KEY, algorithm=JWT_ALGORITHM)
+
+def decode_token(token: str) -> dict:
+    """
+    Decodes and verifies a JWT.
+    Returns the payload if valid.
+    Raises exception if invalid.
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_PUBLIC_KEY,
+            algorithms=[JWT_ALGORITHM],
+        )
+        return payload
+    except InvalidTokenError:
+        raise
