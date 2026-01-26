@@ -3,3 +3,7 @@ uvicorn
 pydentic
 pydantic[email]
 sqlalchemy
+cryptography
+passlib[argon2]
+argon2-cffi
+PyJWT

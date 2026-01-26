@@ -1,223 +1,179 @@
-"""
-InternMatch Backend API
-----------------------
-
-Features implemented:
-- User registration
-- User login (basic, no hashing yet)
-- SQLite + SQLAlchemy ORM
-- One DB session per request
-- Clear request/response models
-- Proper HTTP status codes
-"""
-
-from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.responses import Response
-from pydantic import BaseModel, EmailStr
-from sqlalchemy import create_engine, Column, Integer, String, Enum
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from pydantic import BaseModel, EmailStr, Field
+from typing import Annotated
+from sqlalchemy import create_engine, Column, Integer, String, Enum as SAEnum
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from passlib.context import CryptContext
+from pathlib import Path
 import enum
-
-# -------------------------------------------------------------------
-# Database setup
-# -------------------------------------------------------------------
-
-DATABASE_URL = "sqlite:///internMatch.db"
-
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False}  # required for SQLite + FastAPI
-)
-
-SessionLocal = sessionmaker(bind=engine)
-Base = declarative_base()
+import jwt
+import time
 
 
-# -------------------------------------------------------------------
-# Enums
-# -------------------------------------------------------------------
-
-class Role(enum.Enum):
-    applicant = "Applicant"
-    recruiter = "Recruiter"
-
-
-# -------------------------------------------------------------------
-# Database models
-# -------------------------------------------------------------------
-
-class User(Base):
-    """
-    SQLAlchemy model representing a user.
-    """
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, nullable=False, index=True)
-    password = Column(String, nullable=False)
-    role = Column(Enum(Role), default=Role.applicant, nullable=False)
-
-
-# Create tables
-Base.metadata.create_all(engine)
-
-
-# -------------------------------------------------------------------
-# FastAPI app
-# -------------------------------------------------------------------
-
+#! App & Config
 app = FastAPI(
     title="InternMatch API",
     description="Backend API for InternMatch",
-    version="1.0.0"
+    version="1.0.0",
 )
 
+DATABASE_URL = "sqlite:///internMatch.db"
 
-# -------------------------------------------------------------------
-# Dependency
-# -------------------------------------------------------------------
+JWT_ALGORITHM = "EdDSA"
+JWT_EXPIRE_SECONDS = 60 * 60  # 1 hour
+
+BASE_DIR = Path(__file__).resolve().parent
+PRIVATE_KEY_PATH = BASE_DIR / "jwt_private.key"
+PUBLIC_KEY_PATH = BASE_DIR / "jwt_public.key"
+
+try:
+    JWT_PRIVATE_KEY = PRIVATE_KEY_PATH.read_bytes()
+    JWT_PUBLIC_KEY = PUBLIC_KEY_PATH.read_bytes()
+except FileNotFoundError:
+    raise RuntimeError("JWT key files not found")
+
+
+#! Database
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False},
+)
+
+SessionLocal = sessionmaker(bind=engine, autoflush=False)
+Base = declarative_base()
 
 def get_db() -> Session:
-    """
-    Provides a database session per request.
-    Ensures the session is always closed.
-    """
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
+DbSession = Annotated[Session, Depends(get_db)]
 
-# -------------------------------------------------------------------
-# Request models
-# -------------------------------------------------------------------
 
+#! Security (Passwords)
+pwd_context = CryptContext(
+    schemes=["argon2"],
+    deprecated="auto",
+)
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(password: str, password_hash: str) -> bool:
+    return pwd_context.verify(password, password_hash)
+
+
+#! Enums
+class Role(str, enum.Enum):
+    applicant = "applicant"
+    recruiter = "recruiter"
+
+
+#! Models
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    password_hash = Column(String, nullable=False)
+    role = Column(SAEnum(Role), nullable=False)
+
+Base.metadata.create_all(engine)
+
+
+#! Schemas (Pydantic)
 class RegisterRequest(BaseModel):
-    """
-    Request body for user registration.
-    """
-    email: EmailStr
-    password: str
-    role: Role
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "email": "user@example.com",
-                "password": "secret123",
-                "role": "Applicant"
-            }
-        }
-
+    email: EmailStr = Field(
+        example="user@example.com",
+        description="Unique email address",
+    )
+    password: str = Field(
+        min_length=8,
+        example="SuperSecret123",
+        description="User password (min 8 characters)",
+    )
+    role: Role = Field(
+        example="applicant",
+        description="User role",
+    )
 
 class LoginRequest(BaseModel):
-    """
-    Request body for user login.
-    """
-    email: EmailStr
-    password: str
+    email: EmailStr = Field(example="user@example.com")
+    password: str = Field(example="SuperSecret123")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "email": "user@example.com",
-                "password": "secret123"
-            }
-        }
+class TokenResponse(BaseModel):
+    access_token: str = Field(description="JWT access token")
+    token_type: str = Field(default="bearer")
 
 
-# -------------------------------------------------------------------
-# Utility functions
-# -------------------------------------------------------------------
-
+#! Utilities
 def get_user_by_email(db: Session, email: str) -> User | None:
-    """
-    Fetch a user by email.
-    """
     return db.query(User).filter(User.email == email).first()
 
+def create_access_token(user: User) -> str:
+    payload = {
+        "sub": str(user.id),
+        "role": user.role,
+        "exp": int(time.time()) + JWT_EXPIRE_SECONDS,
+    }
+    return jwt.encode(
+        payload,
+        JWT_PRIVATE_KEY,
+        algorithm=JWT_ALGORITHM,
+    )
 
-# -------------------------------------------------------------------
-# Routes
-# -------------------------------------------------------------------
 
-@app.get("/", tags=["Health"])
-def health_check():
-    """
-    Health check endpoint.
-    """
-    return {"status": "ok"}
-
-
+#! Routes
 @app.post(
     "/register",
     status_code=status.HTTP_201_CREATED,
     tags=["Auth"],
-    summary="Register a new user"
+    summary="Register a new user",
+    description="Creates a new user account.",
 )
 def register_user(
     data: RegisterRequest,
-    db: Session = Depends(get_db)
+    db: DbSession,
 ):
-    """
-    Registers a new user.
-
-    - Email must be unique
-    - Password is stored as plain text (for now)
-    """
-
     if get_user_by_email(db, data.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="User already exists"
+            detail="User already exists",
         )
 
     user = User(
         email=data.email,
-        password=data.password,
-        role=data.role
+        password_hash=hash_password(data.password),
+        role=data.role,
     )
 
     db.add(user)
     db.commit()
 
-    # No response body needed
     return Response(status_code=status.HTTP_201_CREATED)
-
 
 @app.post(
     "/login",
+    response_model=TokenResponse,
     tags=["Auth"],
-    summary="Login user"
+    summary="Login user",
+    description="Authenticates user and returns a JWT token.",
 )
 def login_user(
     data: LoginRequest,
-    db: Session = Depends(get_db)
+    db: DbSession,
 ):
-    """
-    Logs in a user.
-
-    NOTE:
-    - This is NOT secure yet
-    - Password hashing and JWT will be added later
-    """
-
     user = get_user_by_email(db, data.email)
 
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-
-    if user.password != data.password:
+    if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials"
+            detail="Invalid email or password",
         )
 
-    return {
-        "message": "Login successful",
-        "role": user.role
-    }
+    token = create_access_token(user)
+
+    return TokenResponse(access_token=token,)
