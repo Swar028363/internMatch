@@ -1,4 +1,5 @@
 fastapi
+fastapi[standard]
 uvicorn
 pydentic
 pydantic[email]
@@ -6,4 +7,5 @@ sqlalchemy
 cryptography
 passlib[argon2]
 argon2-cffi
+email-validator
 PyJWT

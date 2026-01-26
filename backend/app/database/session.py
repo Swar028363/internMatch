@@ -1,8 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from typing import Generator
-
-DATABASE_URL = "sqlite:///internMatch.db"
+from app.core.config import DATABASE_URL
 
 engine = create_engine(
     DATABASE_URL,
