@@ -1,18 +1,49 @@
 from typing import Annotated
-from app.models.user import Role
+
 from pydantic import BaseModel, EmailStr, Field
+
+from app.models.user import Role
 
 
 class RegisterRequest(BaseModel):
-    role: Role
-    email: Annotated[EmailStr, Field(example="foo@example.com")]
-    password: Annotated[str, Field(min_length=8, example="SuperStrongPassowrd123")]
+    """
+    Request payload for user registration.
+    """
+
+    role: Role = Field(
+        ...,
+        example="applicant",
+        description="Role of the user (applicant or recruiter)",
+    )
+    email: Annotated[
+        EmailStr,
+        Field(example="user@example.com"),
+    ]
+    password: Annotated[
+        str,
+        Field(min_length=8, example="StrongPassword123"),
+    ]
 
 
 class LoginRequest(BaseModel):
-    email: Annotated[EmailStr, Field(example="foo@example.com")]
-    password: Annotated[str, Field(min_length=8, example="SuperStrongPassowrd123")]
+    """
+    Request payload for user login.
+    """
+
+    email: Annotated[
+        EmailStr,
+        Field(example="user@example.com"),
+    ]
+    password: Annotated[
+        str,
+        Field(min_length=8, example="StrongPassword123"),
+    ]
+
 
 class TokenResponse(BaseModel):
+    """
+    Access token response.
+    """
+
     access_token: str
-    token_type: Annotated[str, Field(default="bearer")]
+    token_type: str = Field(default="bearer", example="bearer")

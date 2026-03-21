@@ -1,62 +1,50 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional
 from datetime import date, datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 
-# -----------------------------
-# Base schema (shared fields)
-# -----------------------------
 class ApplicantProfileBase(BaseModel):
-    first_name: Optional[str] = None
-    middle_name: Optional[str] = None
-    last_name: Optional[str] = None
+    first_name: Optional[str] = Field(example="John")
+    middle_name: Optional[str] = Field(example="A.")
+    last_name: Optional[str] = Field(example="Doe")
 
-    dob: Optional[date] = None
-    gender: Optional[str] = None
+    dob: Optional[date] = Field(example="2001-05-20")
+    gender: Optional[str] = Field(example="male")
 
-    city: Optional[str] = None
-    state: Optional[str] = None
-    country: Optional[str] = None
+    city: Optional[str] = Field(example="Bangalore")
+    state: Optional[str] = Field(example="Karnataka")
+    country: Optional[str] = Field(example="India")
 
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(example="+91XXXXXXXXXX")
 
-    education_level: Optional[str] = None
-    degree_name: Optional[str] = None
-    college_name: Optional[str] = None
-    university_name: Optional[str] = None
-    graduation_year: Optional[int] = None
-    gpa: Optional[str] = None  # out of 10, frontend responsibility
+    education_level: Optional[str] = Field(example="Bachelor's")
+    degree_name: Optional[str] = Field(example="B.Tech")
+    college_name: Optional[str] = Field(example="ABC College")
+    university_name: Optional[str] = Field(example="XYZ University")
+
+    graduation_year: Optional[int] = Field(example=2025)
+    gpa: Optional[str] = Field(example="8.5")
 
     skills: Optional[List[str]] = Field(
-        default=None,
-        description="Ordered list of skills (standardized casing)",
-        example=["Python", "FastAPI", "Machine Learning"],
+        example=["Python", "FastAPI", "Machine Learning"]
     )
 
-    headline: Optional[str] = None
-    bio: Optional[str] = None
+    headline: Optional[str] = Field(example="Aspiring ML Engineer")
+    bio: Optional[str] = Field(example="Passionate about AI and backend systems.")
 
-    languages_spoken: Optional[List[str]] = None
-    hobbies: Optional[List[str]] = None
+    languages_spoken: Optional[List[str]] = Field(example=["English", "Hindi"])
+    hobbies: Optional[List[str]] = Field(example=["Reading", "Coding"])
 
-    portfolio_url: Optional[str] = None
-    github_url: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    personal_website: Optional[str] = None
-
-
-class ApplicantProfileCreate(ApplicantProfileBase):
-    """
-    Used internally when creating an applicant profile.
-    Usually created empty at registration.
-    """
-    pass
+    portfolio_url: Optional[str]
+    github_url: Optional[str]
+    linkedin_url: Optional[str]
+    personal_website: Optional[str]
 
 
 class ApplicantProfileUpdate(ApplicantProfileBase):
     """
-    Used when applicant updates their profile.
-    All fields are optional.
+    Partial update payload.
     """
     pass
 
@@ -69,8 +57,8 @@ class ApplicantProfileResponse(ApplicantProfileBase):
     profile_completion_percentage: int
 
     created_at: datetime
-    updated_at: datetime
-    last_active_at: Optional[datetime] = None
+    updated_at: Optional[datetime]
+    last_active_at: Optional[datetime]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
