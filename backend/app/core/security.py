@@ -1,19 +1,21 @@
 import time
+
 import jwt
 from jwt import InvalidTokenError
 from passlib.context import CryptContext
+
 from app.core.config import (
     JWT_ALGORITHM,
     JWT_EXPIRE_SECONDS,
     JWT_PRIVATE_KEY,
-    JWT_PUBLIC_KEY
-) 
-
+    JWT_PUBLIC_KEY,
+)
 
 pwd_context = CryptContext(
     schemes=["argon2"],
     deprecated="auto",
 )
+
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)

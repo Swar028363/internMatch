@@ -1,11 +1,14 @@
 fastapi
-fastapi[standard]
 uvicorn
-pydentic
+
 pydantic[email]
+
 sqlalchemy
+
+PyJWT
 cryptography
+
 passlib[argon2]
 argon2-cffi
+
 email-validator
-PyJWT

@@ -10,12 +10,11 @@ JWT_EXPIRE_SECONDS = 60 * 60  # 1 hour
 PRIVATE_KEY_PATH = BASE_DIR / "jwt_private.key"
 PUBLIC_KEY_PATH = BASE_DIR / "jwt_public.key"
 
-try:
-    JWT_PRIVATE_KEY = PRIVATE_KEY_PATH.read_bytes()
-    JWT_PUBLIC_KEY = PUBLIC_KEY_PATH.read_bytes()
-except FileNotFoundError:
+if not PRIVATE_KEY_PATH.exists() or not PUBLIC_KEY_PATH.exists():
     raise RuntimeError("JWT key files not found")
 
+JWT_PRIVATE_KEY = PRIVATE_KEY_PATH.read_bytes()
+JWT_PUBLIC_KEY = PUBLIC_KEY_PATH.read_bytes()
 
 __all__ = [
     "DATABASE_URL",
