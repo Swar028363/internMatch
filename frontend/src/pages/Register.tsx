@@ -1,263 +1,271 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/useAuth";
+import { useState, useEffect, useRef } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/useAuth'
+import { authService } from '../services/auth'
+import { ApiError } from '../services/api'
+
+type Step = 'details' | 'otp'
 
 export default function Register() {
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-    confirmPassword: "",
-    userType: "applicant",
-  });
+  const { sendRegisterOtp, verifyRegisterOtp, user } = useAuth()
+  const navigate = useNavigate()
 
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  const [step, setStep] = useState<Step>('details')
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
+  // Step 1 fields
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [role, setRole] = useState<'applicant' | 'recruiter'>('applicant')
+  const [showPassword, setShowPassword] = useState(false)
 
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
-  };
+  // Step 2 fields
+  const [otp, setOtp] = useState(['', '', '', '', '', ''])
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([])
 
-  const validate = () => {
-    // Required fields
-    if (!formData.email || !formData.password || !formData.confirmPassword) {
-      return "All fields are required.";
+  // Resend cooldown
+  const [cooldown, setCooldown] = useState(0)
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  // Redirect once logged in after OTP verify
+  useEffect(() => {
+    if (user) {
+      navigate(user.role === 'recruiter' ? '/dashboard/recruiter' : '/dashboard/student', {
+        replace: true,
+      })
     }
+  }, [user, navigate])
 
-    // Email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      return "Enter a valid email address.";
-    }
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }
+  }, [])
 
-    // Password length
-    if (formData.password.length < 8) {
-      return "Password must be at least 8 characters.";
-    }
-
-    // Password match
-    if (formData.password !== formData.confirmPassword) {
-      return "Passwords do not match.";
-    }
-
-    return "";
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const validationError = validate();
-
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
-    setError("");
-    setLoading(true);
-
-    try {
-      // Load users from localStorage
-      let users = JSON.parse(localStorage.getItem('all_users') || '[]');
-      if (users.length === 0) {
-        // First time - load from public/data/users.json
-        try {
-          const response = await fetch('/data/users.json');
-          users = await response.json();
-        } catch {
-          users = [];
+  const startCooldown = () => {
+    setCooldown(60)
+    cooldownRef.current = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(cooldownRef.current!)
+          return 0
         }
-      }
+        return prev - 1
+      })
+    }, 1000)
+  }
 
-      // Check if email already exists
-      if (users.some((u: any) => u.email === formData.email)) {
-        setError("Email already registered");
-        setLoading(false);
-        return;
-      }
+  // Step 1 submit
+  const validateDetails = (): string => {
+    if (!email || !password || !confirmPassword) return 'All fields are required.'
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Enter a valid email.'
+    if (password.length < 8) return 'Password must be at least 8 characters.'
+    if (password !== confirmPassword) return 'Passwords do not match.'
+    return ''
+  }
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
+  const handleDetailsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const err = validateDetails()
+    if (err) { setError(err); return }
 
-      // Create new user
-      const newUser = {
-        id: Date.now().toString(),
-        email: formData.email,
-        password: formData.password,
-        role: formData.userType,
-        firstName: "",
-        lastName: "",
-        ...(formData.userType === 'applicant' ? {
-          phone: "",
-          location: "",
-          education: "",
-          skills: [],
-          bio: ""
-        } : {
-          phone: "",
-          company: "",
-          companyPosition: "",
-          companyEmail: ""
-        })
-      };
-
-      // Add to users list
-      users.push(newUser);
-      localStorage.setItem('all_users', JSON.stringify(users));
-
-      const mockToken = `token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Call login to store in context and localStorage
-      login(
-        {
-          id: newUser.id,
-          email: newUser.email,
-          role: newUser.role as 'applicant' | 'recruiter',
-          firstName: newUser.firstName,
-          lastName: newUser.lastName,
-        },
-        mockToken
-      );
-
-      // Redirect based on role
-      if (formData.userType === 'recruiter') {
-        navigate('/dashboard/recruiter');
-      } else {
-        navigate('/dashboard/student');
-      }
+    setError('')
+    setLoading(true)
+    try {
+      await sendRegisterOtp(email, password, role)
+      setStep('otp')
+      startCooldown()
+      // Focus first OTP box after transition
+      setTimeout(() => otpRefs.current[0]?.focus(), 100)
     } catch (err) {
-      setError("Registration failed. Please try again.");
+      setError(err instanceof ApiError ? err.message : 'Failed to send OTP. Please try again.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
+
+  // OTP input handling
+  const handleOtpChange = (index: number, value: string) => {
+    // Accept only digits
+    if (!/^\d?$/.test(value)) return
+    const next = [...otp]
+    next[index] = value
+    setOtp(next)
+    // Auto-advance
+    if (value && index < 5) otpRefs.current[index + 1]?.focus()
+  }
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus()
+    }
+  }
+
+  const handleOtpPaste = (e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+    if (text.length === 6) {
+      setOtp(text.split(''))
+      otpRefs.current[5]?.focus()
+    }
+    e.preventDefault()
+  }
+
+  // Step 2 submit
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const code = otp.join('')
+    if (code.length !== 6) { setError('Please enter all 6 digits.'); return }
+
+    setError('')
+    setLoading(true)
+    try {
+      await verifyRegisterOtp(email, code)
+      // useEffect above handles redirect once user is set
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Verification failed. Please try again.')
+      setLoading(false)
+    }
+  }
+
+  // Resend
+  const handleResend = async () => {
+    if (cooldown > 0) return
+    setError('')
+    try {
+      await authService.resendOtp({ email, purpose: 'verify' })
+      startCooldown()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to resend OTP.')
+    }
+  }
+
+  // Render
+  const inputClass = 'mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50">
+    <main className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
       <div className="w-full max-w-md bg-white border border-gray-200 rounded-lg p-8">
 
-        <h1 className="text-2xl font-semibold text-gray-900">
-          Create Account
-        </h1>
-
-        <p className="mt-2 text-sm text-gray-600">
-          Fill in the details to register.
-        </p>
-
-        {/* Error Box (Same Style as Login) */}
-        {error && (
-          <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-800 rounded">
-            {error}
+        {/* Progress indicator */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold
+            ${step === 'details' ? 'bg-blue-600 text-white' : 'bg-green-500 text-white'}`}>
+            {step === 'otp' ? '✓' : '1'}
           </div>
-        )}
-
-        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-          
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Email
-            </label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="you@example.com"
-            />
+          <div className={`flex-1 h-0.5 ${step === 'otp' ? 'bg-blue-600' : 'bg-gray-200'}`} />
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold
+            ${step === 'otp' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+            2
           </div>
+        </div>
 
-          {/* Password */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <input
-              type={showPassword ? "text" : "password"}
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter password"
-            />
-          </div>
+        {step === 'details' ? (
+          <>
+            <h1 className="text-2xl font-semibold text-gray-900">Create Account</h1>
+            <p className="mt-1 text-sm text-gray-600">We'll send a verification code to your email.</p>
 
-          {/* Confirm Password */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Confirm Password
-            </label>
-            <input
-              type={showPassword ? "text" : "password"}
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Re-enter password"
-            />
-          </div>
+            {error && (
+              <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-800 rounded text-sm">{error}</div>
+            )}
 
-          {/* Show Password */}
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              checked={showPassword}
-              onChange={() => setShowPassword(!showPassword)}
-              className="mr-2"
-            />
-            <span className="text-sm text-gray-600">
-              Show Password
-            </span>
-          </div>
+            <form className="mt-5 space-y-4" onSubmit={handleDetailsSubmit}>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  className={inputClass} placeholder="you@example.com" autoComplete="email" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Password</label>
+                <input type={showPassword ? 'text' : 'password'} value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={inputClass} placeholder="Min. 8 characters" autoComplete="new-password" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
+                <input type={showPassword ? 'text' : 'password'} value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={inputClass} placeholder="Re-enter password" autoComplete="new-password" />
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="show-pw" checked={showPassword}
+                  onChange={() => setShowPassword(!showPassword)} />
+                <label htmlFor="show-pw" className="text-sm text-gray-600">Show password</label>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Account Type</label>
+                <select value={role} onChange={(e) => setRole(e.target.value as 'applicant' | 'recruiter')}
+                  className={inputClass}>
+                  <option value="applicant">Student / Applicant</option>
+                  <option value="recruiter">Recruiter</option>
+                </select>
+              </div>
+              <button type="submit" disabled={loading}
+                className="w-full rounded-md bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400 transition">
+                {loading ? 'Sending code...' : 'Continue'}
+              </button>
+            </form>
 
-          {/* Account Type */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Account Type
-            </label>
-            <select
-              name="userType"
-              value={formData.userType}
-              onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <p className="mt-4 text-center text-sm text-gray-600">
+              Already have an account?{' '}
+              <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">Sign in</Link>
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl font-semibold text-gray-900">Verify your email</h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Enter the 6-digit code sent to <span className="font-medium text-gray-900">{email}</span>
+            </p>
+
+            {error && (
+              <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-800 rounded text-sm">{error}</div>
+            )}
+
+            <form className="mt-6" onSubmit={handleOtpSubmit}>
+              {/* OTP boxes */}
+              <div className="flex gap-3 justify-center mb-6" onPaste={handleOtpPaste}>
+                {otp.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => { otpRefs.current[i] = el }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(i, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                    className="w-11 h-14 text-center text-xl font-bold border-2 rounded-lg focus:outline-none focus:border-blue-500 border-gray-300"
+                  />
+                ))}
+              </div>
+
+              <button type="submit" disabled={loading}
+                className="w-full rounded-md bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400 transition">
+                {loading ? 'Verifying...' : 'Verify & Create Account'}
+              </button>
+            </form>
+
+            <div className="mt-4 text-center">
+              <button
+                onClick={handleResend}
+                disabled={cooldown > 0}
+                className="text-sm text-blue-600 hover:underline disabled:text-gray-400 disabled:no-underline"
+              >
+                {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend code'}
+              </button>
+            </div>
+
+            <button
+              onClick={() => { setStep('details'); setOtp(['', '', '', '', '', '']); setError('') }}
+              className="mt-3 w-full text-center text-sm text-gray-500 hover:text-gray-700"
             >
-              <option value="applicant">Student</option>
-              <option value="recruiter">Recruiter</option>
-            </select>
-          </div>
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400 transition"
-          >
-            {loading ? "Creating account..." : "Create Account"}
-          </button>
-
-        </form>
-
-        <p className="mt-4 text-center text-sm text-gray-600">
-          Already have an account?{" "}
-          <Link
-            to="/login"
-            className="text-blue-600 hover:text-blue-700 font-medium"
-          >
-            Login
-          </Link>
-        </p>
-
+              ← Change email or password
+            </button>
+          </>
+        )}
       </div>
     </main>
-  );
+  )
 }
