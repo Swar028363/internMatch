@@ -1,0 +1,98 @@
+[
+  {
+    "id": 1,
+    "company": "Tech Innovations Inc",
+    "position": "Frontend Developer Intern",
+    "location": "New York, NY",
+    "salary": "$20/hour",
+    "duration": "3 months",
+    "jobType": "Internship",
+    "description": "Join our dynamic team and work on cutting-edge web applications. You will learn modern web development practices and work with experienced developers.",
+    "skills": ["React", "JavaScript", "CSS", "HTML"],
+    "postedDate": "2025-02-01"
+  },
+  {
+    "id": 2,
+    "company": "Digital Solutions Ltd",
+    "position": "UX/UI Designer Intern",
+    "location": "San Francisco, CA",
+    "salary": "$18/hour",
+    "duration": "4 months",
+    "jobType": "Internship",
+    "description": "Help design beautiful and user-friendly interfaces for our mobile apps. Collaborate with product managers and engineers to create amazing user experiences.",
+    "skills": ["Figma", "UI Design", "User Research", "Prototyping"],
+    "postedDate": "2025-02-02"
+  },
+  {
+    "id": 3,
+    "company": "Data Analytics Pro",
+    "position": "Data Analyst Intern",
+    "location": "Chicago, IL",
+    "salary": "$22/hour",
+    "duration": "3 months",
+    "jobType": "Internship",
+    "description": "Analyze data sets and create reports for marketing teams. Learn SQL, Python, and data visualization tools while solving real business problems.",
+    "skills": ["SQL", "Python", "Excel", "Tableau"],
+    "postedDate": "2025-02-03"
+  },
+  {
+    "id": 4,
+    "company": "Mobile Apps Studio",
+    "position": "iOS Developer Intern",
+    "location": "Los Angeles, CA",
+    "salary": "$21/hour",
+    "duration": "5 months",
+    "jobType": "Internship",
+    "description": "Build iOS applications using Swift. Work on real projects that will be used by thousands of users. Great opportunity to learn iOS development.",
+    "skills": ["Swift", "iOS", "Xcode", "REST APIs"],
+    "postedDate": "2025-02-04"
+  },
+  {
+    "id": 5,
+    "company": "Cloud Systems Corp",
+    "position": "Backend Developer Intern",
+    "location": "Seattle, WA",
+    "salary": "$23/hour",
+    "duration": "4 months",
+    "jobType": "Internship",
+    "description": "Work on server-side applications and databases. Learn about cloud infrastructure, microservices, and best practices in backend development.",
+    "skills": ["Python", "Node.js", "Databases", "AWS"],
+    "postedDate": "2025-02-05"
+  },
+  {
+    "id": 6,
+    "company": "Creative Marketing Agency",
+    "position": "Marketing Intern",
+    "location": "Boston, MA",
+    "salary": "$16/hour",
+    "duration": "3 months",
+    "jobType": "Internship",
+    "description": "Help create marketing campaigns and social media content. Learn about digital marketing, SEO, and brand management from experienced marketers.",
+    "skills": ["Social Media", "Content Writing", "SEO", "Marketing"],
+    "postedDate": "2025-02-06"
+  },
+  {
+    "id": 7,
+    "company": "Cybersecurity Solutions",
+    "position": "Security Analyst Intern",
+    "location": "Austin, TX",
+    "salary": "$24/hour",
+    "duration": "4 months",
+    "jobType": "Internship",
+    "description": "Learn about network security and ethical hacking. Help identify vulnerabilities in systems and contribute to improving our security infrastructure.",
+    "skills": ["Network Security", "Linux", "Python", "Penetration Testing"],
+    "postedDate": "2025-02-07"
+  },
+  {
+    "id": 8,
+    "company": "E-commerce Platforms",
+    "position": "Full Stack Developer Intern",
+    "location": "Austin, TX",
+    "salary": "$22/hour",
+    "duration": "3 months",
+    "jobType": "Internship",
+    "description": "Build complete web applications from frontend to backend. Work with modern tech stacks and contribute to our main product used by thousands.",
+    "skills": ["React", "Node.js", "MongoDB", "JavaScript"],
+    "postedDate": "2025-02-08"
+  }
+]
