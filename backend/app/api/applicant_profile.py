@@ -23,11 +23,13 @@ DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+# Self: get own profile
+
 @router.get(
     "",
     response_model=ApplicantProfileResponse,
-    summary="Get applicant profile",
-    description="Returns the authenticated applicant's profile.",
+    summary="Get own applicant profile",
+    description="Returns the authenticated applicant's own profile.",
 )
 def get_profile(
     db: DbSession,
@@ -56,6 +58,8 @@ def get_profile(
 
     return profile
 
+
+# Self: update own profile
 
 @router.put(
     "",
@@ -103,6 +107,8 @@ def update_profile(
     return profile
 
 
+# Self: delete own profile
+
 @router.delete(
     "",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -136,3 +142,39 @@ def delete_profile(
     profile.is_deleted = True
     profile.updated_at = func.now()
     db.commit()
+
+
+# Recruiter: view any applicant's profile by user_id
+
+@router.get(
+    "/{user_id}",
+    response_model=ApplicantProfileResponse,
+    summary="Get applicant profile by user ID (recruiter only)",
+)
+def get_profile_by_id(
+    user_id: int,
+    db: DbSession,
+    current_user: CurrentUser,
+):
+    if current_user.role != Role.recruiter:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only recruiters can view other applicant profiles",
+        )
+
+    profile = (
+        db.query(ApplicantProfile)
+        .filter(
+            ApplicantProfile.user_id == user_id,
+            ApplicantProfile.is_deleted.is_(False),
+        )
+        .first()
+    )
+
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Applicant profile not found",
+        )
+
+    return profile
