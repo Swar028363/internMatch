@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom"
+import { Link } from 'react-router-dom'
 
 export default function Footer() {
   const currentYear = new Date().getFullYear()
@@ -7,11 +7,12 @@ export default function Footer() {
     <footer className="bg-gray-900 text-gray-300">
       <div className="mx-auto max-w-6xl px-6 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+
           {/* Brand */}
           <div>
             <h3 className="text-lg font-semibold text-white mb-2">InternMatch</h3>
             <p className="text-sm text-gray-400">
-              Skill-based internship matching platform.
+              Skill-based internship matching platform connecting students with the right opportunities.
             </p>
           </div>
 
@@ -25,13 +26,13 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/profile" className="hover:text-white transition">
+                <Link to="/account" className="hover:text-white transition">
                   My Profile
                 </Link>
               </li>
               <li>
-                <Link to="/companies" className="hover:text-white transition">
-                  Browse Companies
+                <Link to="/dashboard/student" className="hover:text-white transition">
+                  Dashboard
                 </Link>
               </li>
             </ul>
@@ -39,7 +40,7 @@ export default function Footer() {
 
           {/* For Companies */}
           <div>
-            <h4 className="text-sm font-semibold text-white mb-4">For Companies</h4>
+            <h4 className="text-sm font-semibold text-white mb-4">For Recruiters</h4>
             <ul className="space-y-2 text-sm">
               <li>
                 <Link to="/post-internship" className="hover:text-white transition">
@@ -47,45 +48,43 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/browse-candidates" className="hover:text-white transition">
-                  Browse Candidates
-                </Link>
-              </li>
-              <li>
-                <Link to="/dashboard" className="hover:text-white transition">
+                <Link to="/dashboard/recruiter" className="hover:text-white transition">
                   Dashboard
                 </Link>
               </li>
+              <li>
+                <Link to="/register" className="hover:text-white transition">
+                  Create Account
+                </Link>
+              </li>
             </ul>
           </div>
 
-          {/* Resources */}
+          {/* Company */}
           <div>
-            <h4 className="text-sm font-semibold text-white mb-4">Resources</h4>
+            <h4 className="text-sm font-semibold text-white mb-4">Company</h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link to="/help-center" className="hover:text-white transition">
-                  Help Center
+                <Link to="/about" className="hover:text-white transition">
+                  About Us
                 </Link>
               </li>
               <li>
-                <Link to="/privacy-policy" className="hover:text-white transition">
-                  Privacy Policy
-                </Link>
-              </li>
-              <li>
-                <Link to="/terms-of-service" className="hover:text-white transition">
-                  Terms of Service
+                <Link to="/contact" className="hover:text-white transition">
+                  Contact Us
                 </Link>
               </li>
             </ul>
           </div>
+
         </div>
 
-        {/* Divider */}
-        <div className="border-t border-gray-800 pt-6 mt-6">
+        <div className="border-t border-gray-800 pt-6 mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-gray-400">
             © {currentYear} InternMatch. All rights reserved.
+          </p>
+          <p className="text-sm text-gray-500">
+            Built with FastAPI + React
           </p>
         </div>
       </div>
