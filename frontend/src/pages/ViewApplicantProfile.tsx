@@ -1,135 +1,98 @@
-import { useParams, useNavigate } from 'react-router-dom';
-import { DefaultAvatar } from '../components/DefaultAvatar';
-
-interface ApplicantProfile {
-  name: string;
-  headline: string;
-  bio: string;
-  education: string;
-  skills: string[];
-}
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { DefaultAvatar } from '../components/DefaultAvatar'
+import { profileService } from '../services/profile'
+import type { ApplicantProfile } from '../services/profile'
 
 export function ViewApplicantProfile() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
 
-  // For now, we're using mock data from the applicant list
-  // In production, this would fetch from an API
-  const getInitials = (email: string) => {
-    const emailParts = email.split('@')[0].split('.');
-    const firstName = emailParts[0]?.charAt(0).toUpperCase() || 'U';
-    const lastName = emailParts[1]?.charAt(0).toUpperCase() || '';
-    return firstName + lastName;
-  };
+  const [profile, setProfile] = useState<ApplicantProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  // Get applicant data from localStorage (stored during application)
-  const applicants = localStorage.getItem('all_applicants');
-  let applicantData: any = null;
+  useEffect(() => {
+    if (!id) return
+    profileService.getApplicantProfileById(Number(id))
+      .then(setProfile)
+      .catch(() => setError('Applicant profile not found.'))
+      .finally(() => setLoading(false))
+  }, [id])
 
-  if (applicants) {
-    const list = JSON.parse(applicants);
-    applicantData = list.find((a: any) => a.id === id);
+  const getInitials = () => {
+    if (!profile) return 'U'
+    return ((profile.first_name?.charAt(0) ?? '') + (profile.last_name?.charAt(0) ?? '')).toUpperCase() || 'U'
   }
 
-  if (!applicantData) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto">
-          <button
-            onClick={() => navigate(-1)}
-            className="text-blue-600 hover:underline mb-4"
-          >
-            ← Back
-          </button>
-          <div className="text-center">
-            <p className="text-gray-600">Applicant profile not found</p>
-          </div>
-        </div>
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">Loading...</p></div>
+
+  if (error || !profile) return (
+    <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <div className="max-w-4xl mx-auto">
+        <button onClick={() => navigate(-1)} className="text-blue-600 hover:underline mb-4">← Back</button>
+        <p className="text-center text-gray-600">{error || 'Profile not found.'}</p>
       </div>
-    );
-  }
-
-  const skills = applicantData.skills ? applicantData.skills.split(',').map((s: string) => s.trim()) : [];
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
-        <button
-          onClick={() => navigate(-1)}
-          className="text-blue-600 hover:underline mb-4 inline-block"
-        >
-          ← Back
-        </button>
+        <button onClick={() => navigate(-1)} className="text-blue-600 hover:underline mb-4 inline-block">← Back</button>
 
         <div className="bg-white rounded-lg shadow-md p-8">
-          {/* Profile Header */}
+          {/* Header */}
           <div className="flex items-start gap-6 mb-8 pb-8 border-b border-gray-200">
-            <DefaultAvatar size="lg" initials={getInitials(applicantData.email)} />
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold text-gray-900">{applicantData.name}</h1>
-              <p className="text-gray-600 mt-1">{applicantData.email}</p>
-              {applicantData.headline && (
-                <p className="text-lg text-gray-700 mt-2">{applicantData.headline}</p>
-              )}
+            <DefaultAvatar size="lg" initials={getInitials()} />
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {[profile.first_name, profile.last_name].filter(Boolean).join(' ') || 'Applicant'}
+              </h1>
+              {profile.headline && <p className="text-gray-600 mt-1">{profile.headline}</p>}
+              {profile.city && <p className="text-sm text-gray-500 mt-1">{[profile.city, profile.country].filter(Boolean).join(', ')}</p>}
             </div>
           </div>
 
-          {/* About Section */}
-          {applicantData.bio && (
+          {profile.bio && (
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">About</h2>
-              <p className="text-gray-700 whitespace-pre-wrap">{applicantData.bio}</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-3">About</h2>
+              <p className="text-gray-700 whitespace-pre-wrap">{profile.bio}</p>
             </div>
           )}
 
-          {/* Education Section */}
-          {applicantData.education && (
+          {(profile.education_level || profile.degree_name || profile.college_name) && (
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Education</h2>
-              <p className="text-gray-700">{applicantData.education}</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-3">Education</h2>
+              <p className="text-gray-700">{[profile.degree_name, profile.college_name].filter(Boolean).join(' — ')}</p>
+              {profile.graduation_year && <p className="text-sm text-gray-500 mt-1">Class of {profile.graduation_year}</p>}
+              {profile.gpa && <p className="text-sm text-gray-500">GPA: {profile.gpa}</p>}
             </div>
           )}
 
-          {/* Skills Section */}
-          {skills.length > 0 && (
+          {profile.skills?.length > 0 && (
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Skills</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-3">Skills</h2>
               <div className="flex flex-wrap gap-2">
-                {skills.map((skill, idx) => (
-                  <span
-                    key={idx}
-                    className="bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-medium"
-                  >
-                    {skill}
-                  </span>
+                {profile.skills.map((s) => (
+                  <span key={s} className="bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-medium">{s}</span>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Resume Section */}
-          {applicantData.resumeName && (
+          {(profile.linkedin_url || profile.github_url || profile.portfolio_url) && (
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Resume</h2>
-              <div className="border border-gray-300 rounded-lg p-4">
-                <p className="text-gray-600">Uploaded Resume:</p>
-                <p className="font-semibold text-gray-900 mt-1">{applicantData.resumeName}</p>
-                <p className="text-xs text-gray-500 mt-2">
-                  * Resume files are stored locally and cannot be downloaded from this interface.
-                </p>
+              <h2 className="text-xl font-bold text-gray-900 mb-3">Links</h2>
+              <div className="space-y-1">
+                {profile.linkedin_url && <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer" className="block text-blue-600 hover:underline text-sm">{profile.linkedin_url}</a>}
+                {profile.github_url && <a href={profile.github_url} target="_blank" rel="noopener noreferrer" className="block text-blue-600 hover:underline text-sm">{profile.github_url}</a>}
+                {profile.portfolio_url && <a href={profile.portfolio_url} target="_blank" rel="noopener noreferrer" className="block text-blue-600 hover:underline text-sm">{profile.portfolio_url}</a>}
               </div>
             </div>
           )}
-
-          {/* Contact Section */}
-          <div className="bg-gray-50 p-6 rounded-lg">
-            <h2 className="text-lg font-bold text-gray-900 mb-3">Contact Information</h2>
-            <p className="text-gray-700">
-              <span className="font-medium">Email:</span> {applicantData.email}
-            </p>
-          </div>
         </div>
       </div>
     </div>
-  );
+  )
 }

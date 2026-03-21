@@ -1,240 +1,225 @@
-import { useParams, useNavigate } from "react-router-dom"
-import { useState } from "react"
-import { useAuth } from "../context/useAuth"
-import { ApplyModal } from "../components/ApplyModal"
-
-interface Internship {
-  id: number
-  company: string
-  position: string
-  location: string
-  salary: string
-  duration: string
-  jobType: string
-  description: string
-  skills: string[]
-  postedDate: string
-}
-
-const internships: Internship[] = [
-  {
-    id: 1,
-    company: "Ahmedabad Tech Solutions",
-    position: "Frontend Developer Intern",
-    location: "Ahmedabad, Gujarat",
-    salary: "₹12,000/month",
-    duration: "3 months",
-    jobType: "Internship",
-    description:
-      "Work on building responsive web applications using modern frontend technologies.",
-    skills: ["React", "JavaScript", "CSS", "HTML"],
-    postedDate: "2026-02-01",
-  },
-  {
-    id: 2,
-    company: "Gujarat Data Systems",
-    position: "Data Analyst Intern",
-    location: "Gandhinagar, Gujarat",
-    salary: "₹15,000/month",
-    duration: "4 months",
-    jobType: "Internship",
-    description:
-      "Assist in analyzing datasets and preparing reports for business insights.",
-    skills: ["Python", "SQL", "Excel"],
-    postedDate: "2026-02-02",
-  },
-  {
-    id: 3,
-    company: "Surat Digital Labs",
-    position: "UI/UX Design Intern",
-    location: "Surat, Gujarat",
-    salary: "₹10,000/month",
-    duration: "3 months",
-    jobType: "Internship",
-    description:
-      "Support the design team in creating clean and user-friendly interfaces.",
-    skills: ["Figma", "UI Design", "Prototyping"],
-    postedDate: "2026-02-03",
-  },
-  {
-    id: 4,
-    company: "Vadodara Software Pvt Ltd",
-    position: "Full Stack Developer Intern",
-    location: "Vadodara, Gujarat",
-    salary: "₹18,000/month",
-    duration: "6 months",
-    jobType: "Internship",
-    description:
-      "Work on frontend and backend development for internal web applications.",
-    skills: ["React", "Node.js", "MongoDB"],
-    postedDate: "2026-02-04",
-  },
-  {
-    id: 5,
-    company: "Rajkot IT Services",
-    position: "Mobile App Developer Intern",
-    location: "Rajkot, Gujarat",
-    salary: "₹14,000/month",
-    duration: "5 months",
-    jobType: "Internship",
-    description:
-      "Assist in developing and testing Android mobile applications.",
-    skills: ["Java", "Android", "REST APIs"],
-    postedDate: "2026-02-05",
-  },
-]
+import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useAuth } from '../context/useAuth'
+import { internshipService } from '../services/internships'
+import type { Internship } from '../services/internships'
+import { applicationService } from '../services/applications'
+import { ApiError } from '../services/api'
 
 export default function InternshipDetails() {
-  const { id } = useParams()
+  const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { isAuthenticated, user } = useAuth()
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  const { user } = useAuth()
 
-  const internship = internships.find(
-    (item) => item.id === Number(id)
+  const [internship, setInternship] = useState<Internship | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const [showApply, setShowApply] = useState(false)
+  const [coverLetter, setCoverLetter] = useState('')
+  const [resume, setResume] = useState<File | null>(null)
+  const [resumeName, setResumeName] = useState('')
+  const [applyError, setApplyError] = useState('')
+  const [applyLoading, setApplyLoading] = useState(false)
+  const [applied, setApplied] = useState(false)
+
+  useEffect(() => {
+    if (!id) return
+    internshipService.getById(Number(id))
+      .then(setInternship)
+      .catch(() => setError('Internship not found.'))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const allowed = ['application/pdf', 'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    if (!allowed.includes(file.type)) {
+      setApplyError('Please upload a PDF or Word document.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setApplyError('File must be under 5 MB.')
+      return
+    }
+    setResume(file)
+    setResumeName(file.name)
+    setApplyError('')
+  }
+
+  const handleApply = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!resume) {
+      setApplyError('Please upload your resume.')
+      return
+    }
+    setApplyLoading(true)
+    setApplyError('')
+    try {
+      const application = await applicationService.apply({
+        internship_id: Number(id),
+        cover_letter: coverLetter || undefined,
+      })
+      await applicationService.uploadResume(application.id, resume)
+      setApplied(true)
+      setShowApply(false)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setApplyError(err.message)
+      } else {
+        setApplyError('Failed to submit application.')
+      }
+    } finally {
+      setApplyLoading(false)
+    }
+  }
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-gray-500">Loading...</p>
+    </div>
   )
 
-  const handleApplyClick = () => {
-    if (!isAuthenticated) {
-      navigate('/login')
-      return
-    }
-    if (user?.role !== 'applicant') {
-      alert('Only students can apply for internships')
-      return
-    }
-    setIsModalOpen(true)
-  }
-
-  const handleApplySubmit = (data: ApplicationData) => {
-    // Get existing applications from localStorage
-    const existing = localStorage.getItem('student_applications');
-    type Application = {
-      id: number;
-      internshipId: number;
-      status: string;
-      appliedDate: string;
-      resumeName: string;
-      coverLetter: string;
-    };
-    const applications: Application[] = existing ? JSON.parse(existing) : [];
-
-    // Check if already applied
-    const alreadyApplied = applications.some(
-      (app) => app.internshipId === data.internshipId
-    );
-
-    if (alreadyApplied) {
-      alert('You have already applied for this internship');
-      return;
-    }
-
-    // Create new application
-    const newApplication: Application = {
-      id: Math.max(0, ...applications.map((a) => a.id)) + 1,
-      internshipId: data.internshipId,
-      status: 'applied',
-      appliedDate: new Date().toISOString().split('T')[0],
-      resumeName: data.resumeName,
-      coverLetter: data.coverLetter,
-    };
-
-    applications.push(newApplication);
-    localStorage.setItem('student_applications', JSON.stringify(applications));
-
-    alert('Application submitted successfully!');
-    navigate('/dashboard/student');
-  }
-
-  if (!internship) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        Internship not found
+  if (error || !internship) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <p className="text-gray-600 mb-4">{error || 'Internship not found.'}</p>
+        <button onClick={() => navigate('/explore')} className="text-blue-600 hover:underline">
+          ← Back to Explore
+        </button>
       </div>
-    )
-  }
+    </div>
+  )
 
   return (
-    <main className="min-h-screen bg-white">
-      <div className="mx-auto max-w-4xl px-6 py-12">
-        <button
-          onClick={() => navigate("/explore")}
-          className="text-blue-600 font-medium hover:text-blue-800 mb-8"
-        >
-          ← Back to Internships
+    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
+        <button onClick={() => navigate(-1)} className="text-blue-600 hover:underline mb-6 inline-block">
+          ← Back
         </button>
 
-        <div className="border-b border-gray-200 pb-8 mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            {internship.position}
-          </h1>
-
-          <p className="text-xl text-gray-700 font-medium mb-4">
-            {internship.company}
-          </p>
-
-          <div className="flex flex-wrap gap-4 text-gray-600 text-sm">
-            <span>{internship.location}</span>
-            <span>{internship.salary}</span>
-            <span>{internship.duration}</span>
-            <span>{internship.jobType}</span>
-          </div>
-        </div>
-
-        <div className="space-y-8">
-          <section>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              Job Description
-            </h2>
-            <p className="text-gray-700 leading-relaxed">
-              {internship.description}
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              Required Skills
-            </h2>
-            <div className="flex flex-wrap gap-3">
-              {internship.skills.map((skill) => (
-                <span
-                  key={skill}
-                  className="bg-gray-200 text-gray-900 px-4 py-2 rounded-md font-medium text-sm"
-                >
-                  {skill}
-                </span>
-              ))}
+        <div className="bg-white rounded-lg shadow-md p-8">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">{internship.title}</h1>
+              <p className="text-gray-600 mt-1">{internship.location}</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {internship.job_type}
+                {internship.duration ? ` · ${internship.duration}` : ''}
+                {internship.salary ? ` · ${internship.salary}` : ''}
+              </p>
             </div>
-          </section>
+            {user?.role === 'applicant' && (
+              <div>
+                {applied ? (
+                  <span className="px-4 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium">
+                    ✓ Applied
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setShowApply(true)}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    Apply Now
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
-          <section className="bg-gray-50 p-6 rounded-md">
-            <p className="text-gray-700 mb-2 text-sm">
-              Posted on:{" "}
-              {new Date(internship.postedDate).toLocaleDateString()}
+          <div className="border-t border-gray-200 pt-6 space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">About the Role</h2>
+              <p className="text-gray-700 whitespace-pre-wrap">{internship.description}</p>
+            </div>
+
+            {internship.skills?.length > 0 && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-3">Required Skills</h2>
+                <div className="flex flex-wrap gap-2">
+                  {internship.skills.map((s) => (
+                    <span key={s} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-gray-400">
+              Posted {new Date(internship.created_at).toLocaleDateString()}
             </p>
-
-            <p className="text-gray-600 text-sm">
-              To apply for this internship, please register on the platform and complete your profile.
-            </p>
-
-            <button
-              onClick={handleApplyClick}
-              className="mt-6 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
-            >
-              Apply Now
-            </button>
-          </section>
+          </div>
         </div>
       </div>
 
-      <ApplyModal
-        isOpen={isModalOpen}
-        internshipId={internship.id}
-        position={internship.position}
-        company={internship.company}
-        onClose={() => setIsModalOpen(false)}
-        onApply={handleApplySubmit}
-      />
-    </main>
+      {/* Apply Modal */}
+      {showApply && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900">Apply Now</h2>
+              <button onClick={() => setShowApply(false)} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
+            </div>
+
+            <form onSubmit={handleApply} className="px-6 py-4 space-y-4">
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="text-sm text-gray-600">Applying for</p>
+                <p className="font-semibold text-gray-900">{internship.title}</p>
+              </div>
+
+              {applyError && (
+                <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
+                  {applyError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Upload Resume *
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                  <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="w-full" />
+                  {resumeName && <p className="mt-2 text-sm text-green-600">✓ {resumeName}</p>}
+                  <p className="text-xs text-gray-500 mt-2">PDF or Word, max 5 MB</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Cover Letter (optional)
+                </label>
+                <textarea
+                  value={coverLetter}
+                  onChange={(e) => setCoverLetter(e.target.value)}
+                  placeholder="Tell us why you're interested..."
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowApply(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={applyLoading}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition"
+                >
+                  {applyLoading ? 'Submitting...' : 'Apply'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
