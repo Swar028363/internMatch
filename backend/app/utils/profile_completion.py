@@ -1,6 +1,10 @@
-from app.models.applicant_profile import ApplicantProfile
+from typing import Any, Iterable, Tuple
 
-PROFILE_COMPLETION_FIELDS = (
+from app.models.applicant_profile import ApplicantProfile
+from app.models.recruiter_profile import RecruiterProfile
+
+
+APPLICANT_PROFILE_FIELDS: tuple[str, ...] = (
     "first_name",
     "last_name",
     "dob",
@@ -26,26 +30,56 @@ PROFILE_COMPLETION_FIELDS = (
     "personal_website",
 )
 
+RECRUITER_PROFILE_FIELDS: tuple[str, ...] = (
+    "first_name",
+    "last_name",
+    "job_title",
+    "department",
+    "years_of_experience",
+    "bio",
+    "phone_number",
+    "company_id",
+    "linkedin_url",
+    "language_preference",
+)
 
-def calculate_profile_completion(profile: ApplicantProfile) -> tuple[int, bool]:
-    total = len(PROFILE_COMPLETION_FIELDS)
-    filled = 0
 
-    for field in PROFILE_COMPLETION_FIELDS:
-        value = getattr(profile, field)
+def _is_filled(value: Any) -> bool:
+    """
+    Determines whether a profile field is meaningfully filled.
+    """
+    if value is None:
+        return False
 
-        if value is None:
-            continue
+    if isinstance(value, str):
+        return bool(value.strip())
 
-        if isinstance(value, str) and not value.strip():
-            continue
+    if isinstance(value, (list, tuple, set)):
+        return len(value) > 0
 
-        if isinstance(value, list) and len(value) == 0:
-            continue
+    return True
 
-        filled += 1
 
-    percentage = int((filled / total) * 100)
+def _calculate(fields: Iterable[str], profile: Any) -> Tuple[int, bool]:
+    total = len(fields)
+    filled = sum(
+        1 for field in fields if _is_filled(getattr(profile, field, None))
+    )
+
+    percentage = int((filled / total) * 100) if total else 0
     completed = percentage == 100
-
     return percentage, completed
+
+
+def calculate_profile_completion(profile: Any) -> Tuple[int, bool]:
+    """
+    Calculates completion percentage and completion status
+    for applicant or recruiter profiles.
+    """
+    if isinstance(profile, ApplicantProfile):
+        return _calculate(APPLICANT_PROFILE_FIELDS, profile)
+
+    if isinstance(profile, RecruiterProfile):
+        return _calculate(RECRUITER_PROFILE_FIELDS, profile)
+
+    raise TypeError("Unsupported profile type")

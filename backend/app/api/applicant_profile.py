@@ -1,16 +1,18 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import Annotated
-from datetime import datetime, UTC
+from sqlalchemy.sql import func
+
 from app.database.session import get_db
 from app.deps import get_current_user
 from app.models.user import User, Role
 from app.models.applicant_profile import ApplicantProfile
-from app.utils.profile_completion import calculate_profile_completion
 from app.schemas.applicant_profile import (
     ApplicantProfileResponse,
     ApplicantProfileUpdate,
 )
+from app.utils.profile_completion import calculate_profile_completion
 
 router = APIRouter(
     prefix="/applicant/profile",
@@ -25,34 +27,33 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
     "",
     response_model=ApplicantProfileResponse,
     summary="Get applicant profile",
-    description="""
-    Returns the currently authenticated applicant's profile.
-
-    - Requires authentication
-    - Only accessible to users with role `applicant`
-    """,
+    description="Returns the authenticated applicant's profile.",
 )
-def get_applicant_profile(
+def get_profile(
     db: DbSession,
     current_user: CurrentUser,
 ):
     if current_user.role != Role.applicant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only applicants can access this endpoint",
+            detail="Only applicants can access this resource",
         )
 
     profile = (
         db.query(ApplicantProfile)
-        .filter(ApplicantProfile.user_id == current_user.id)
+        .filter(
+            ApplicantProfile.user_id == current_user.id,
+            ApplicantProfile.is_deleted.is_(False),
+        )
         .first()
     )
+
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Applicant profile not found",
         )
-        
+
     return profile
 
 
@@ -60,15 +61,8 @@ def get_applicant_profile(
     "",
     response_model=ApplicantProfileResponse,
     summary="Update applicant profile",
-    description="""
-    Updates the authenticated applicant's profile.
-
-    - Partial updates allowed
-    - Only fields provided will be updated
-    - Requires authentication
-    """,
 )
-def update_applicant_profile(
+def update_profile(
     data: ApplicantProfileUpdate,
     db: DbSession,
     current_user: CurrentUser,
@@ -81,7 +75,10 @@ def update_applicant_profile(
 
     profile = (
         db.query(ApplicantProfile)
-        .filter(ApplicantProfile.user_id == current_user.id)
+        .filter(
+            ApplicantProfile.user_id == current_user.id,
+            ApplicantProfile.is_deleted.is_(False),
+        )
         .first()
     )
 
@@ -92,17 +89,50 @@ def update_applicant_profile(
         )
 
     update_data = data.model_dump(exclude_unset=True)
-    
     for field, value in update_data.items():
         setattr(profile, field, value)
 
     percentage, completed = calculate_profile_completion(profile)
     profile.profile_completion_percentage = percentage
     profile.profile_completed = completed
-    profile.updated_at = datetime.now(UTC).replace(microsecond=0)
-    profile.last_active_at = datetime.now(UTC).replace(microsecond=0)
+    profile.updated_at = func.now()
+    profile.last_active_at = func.now()
 
     db.commit()
     db.refresh(profile)
-
     return profile
+
+
+@router.delete(
+    "",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete applicant profile",
+)
+def delete_profile(
+    db: DbSession,
+    current_user: CurrentUser,
+):
+    if current_user.role != Role.applicant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only applicants can delete profiles",
+        )
+
+    profile = (
+        db.query(ApplicantProfile)
+        .filter(
+            ApplicantProfile.user_id == current_user.id,
+            ApplicantProfile.is_deleted.is_(False),
+        )
+        .first()
+    )
+
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Applicant profile not found",
+        )
+
+    profile.is_deleted = True
+    profile.updated_at = func.now()
+    db.commit()
