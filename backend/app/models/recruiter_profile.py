@@ -2,11 +2,10 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
-    Date,
-    Boolean,
+    Text,
     ForeignKey,
+    Boolean,
     DateTime,
-    JSON,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -14,8 +13,8 @@ from sqlalchemy.sql import func
 from app.database.session import Base
 
 
-class ApplicantProfile(Base):
-    __tablename__ = "applicant_profiles"
+class RecruiterProfile(Base):
+    __tablename__ = "recruiter_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
 
@@ -26,49 +25,42 @@ class ApplicantProfile(Base):
         unique=True,
         index=True,
     )
+    company_id = Column(
+        Integer,
+        ForeignKey("companies.id"),
+        nullable=True,
+    )
 
     # Personal
     first_name = Column(String)
     middle_name = Column(String)
     last_name = Column(String)
-    dob = Column(Date)
     gender = Column(String)
 
-    # Location
-    city = Column(String)
-    state = Column(String)
-    country = Column(String)
+    profile_photo_url = Column(String)
+    cover_photo_url = Column(String)
+
+    # Professional
+    job_title = Column(String)
+    department = Column(String)
+    years_of_experience = Column(Integer)
+    bio = Column(Text)
 
     # Contact
-    phone = Column(String)
+    phone_number = Column(String)
 
-    # Education
-    education_level = Column(String)
-    degree_name = Column(String)
-    college_name = Column(String)
-    university_name = Column(String)
-    graduation_year = Column(Integer)
-    gpa = Column(String)
-
-    # Skills & bio
-    skills = Column(JSON, default=list, nullable=False)
-    headline = Column(String)
-    bio = Column(String)
-
-    # Extras
-    languages_spoken = Column(JSON)
-    hobbies = Column(JSON)
-
-    # Links
-    portfolio_url = Column(String)
-    github_url = Column(String)
+    # Social
     linkedin_url = Column(String)
-    personal_website = Column(String)
+    github_url = Column(String)
+    twitter_url = Column(String)
+
+    # Preferences
+    language_preference = Column(String)
 
     # System
-    is_deleted = Column(Boolean, default=False, nullable=False)
     profile_completed = Column(Boolean, default=False, nullable=False)
     profile_completion_percentage = Column(Integer, default=0, nullable=False)
+    is_deleted = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(
         DateTime(timezone=True),
@@ -83,5 +75,7 @@ class ApplicantProfile(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
+    deleted_at = Column(DateTime(timezone=True))
 
-    user = relationship("User", backref="applicant_profile", uselist=False)
+    user = relationship("User")
+    company = relationship("Company")

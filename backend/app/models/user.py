@@ -1,5 +1,7 @@
 import enum
-from sqlalchemy import Column, Integer, String, Enum as SAEnum
+
+from sqlalchemy import Column, DateTime, Integer, String, Enum as SAEnum
+from sqlalchemy.sql import func
 
 from app.database.session import Base
 
@@ -16,3 +18,16 @@ class User(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     password_hash = Column(String, nullable=False)
     role = Column(SAEnum(Role), nullable=False)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        onupdate=func.now(),
+    )
+    last_active_at = Column(
+        DateTime(timezone=True),
+    )
