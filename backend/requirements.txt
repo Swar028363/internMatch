@@ -12,9 +12,8 @@ passlib[argon2]
 argon2-cffi
 
 email-validator
+fastapi-mail
 
 python-multipart
 
 python-dotenv
-
-resend

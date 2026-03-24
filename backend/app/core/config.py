@@ -33,13 +33,9 @@ ALLOWED_ORIGINS: list[str] = [o.strip() for o in _origins_env.split(",")]
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(BASE_DIR / "uploads")))
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
 
-# Email (Resend)
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "onboarding@resend.dev")
-
-if not RESEND_API_KEY:
-    import warnings
-    warnings.warn("RESEND_API_KEY is not set — email sending will fail.", stacklevel=2)
+# Gmail  and pass key to send emails from
+GMAIL_USER = os.getenv("GMAIL_USER")  
+GMAIL_PASS = os.getenv("GMAIL_APP_PASS")
 
 __all__ = [
     "DATABASE_URL",

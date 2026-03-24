@@ -1,12 +1,10 @@
 import logging
-
-import resend
-
-from app.core.config import RESEND_API_KEY, FROM_EMAIL, OTP_EXPIRY_SECONDS
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from app.core.config import GMAIL_USER, GMAIL_PASS, OTP_EXPIRY_SECONDS
 
 logger = logging.getLogger(__name__)
-
-resend.api_key = RESEND_API_KEY
 
 
 def send_otp_email(to_email: str, otp: str, purpose: str = "verify") -> None:
@@ -48,15 +46,25 @@ def send_otp_email(to_email: str, otp: str, purpose: str = "verify") -> None:
             </p>
         </div>
         """
-
+        
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = GMAIL_USER
+    msg["To"] = to_email
+    msg.attach(MIMEText(body, "html"))
+    
     try:
-        response = resend.Emails.send({
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(GMAIL_USER, GMAIL_PASS)
+            server.sendmail(GMAIL_USER, to_email, msg.as_string())
+        logger.info("OTP email sent to %s", to_email)
+        """response = resend.Emails.send({
             "from": FROM_EMAIL,
             "to": to_email,
             "subject": subject,
             "html": body,
         })
-        logger.info("OTP email sent to %s, resend id: %s", to_email, response.get("id"))
+        logger.info("OTP email sent to %s, resend id: %s", to_email, response.get("id"))"""
     except Exception as e:
         logger.error("Failed to send OTP email to %s: %s", to_email, str(e))
         raise
