@@ -1,19 +1,25 @@
+# FastAPI & API
 fastapi
 uvicorn
-
-pydantic[email]
-
-sqlalchemy
-
-PyJWT
-cryptography
-
-passlib[argon2]
-argon2-cffi
-
-email-validator
-fastapi-mail
-
 python-multipart
 
+# Database
+sqlalchemy
+psycopg2-binary
+
+# Auth & Security
+python-jose
+passlib
 python-dotenv
+pydantic
+pydantic-settings
+
+# External Storage
+supabase
+
+# CORS & API
+fastapi-cors
+requests
+
+# Data validation
+email-validator

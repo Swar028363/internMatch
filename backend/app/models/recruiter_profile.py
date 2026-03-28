@@ -25,25 +25,16 @@ class RecruiterProfile(Base):
         unique=True,
         index=True,
     )
-    company_id = Column(
-        Integer,
-        ForeignKey("companies.id"),
-        nullable=True,
-    )
 
     # Personal
     first_name = Column(String)
-    middle_name = Column(String)
     last_name = Column(String)
     gender = Column(String)
 
-    profile_photo_url = Column(String)
-    cover_photo_url = Column(String)
-
     # Professional
+    company_name = Column(String)
     job_title = Column(String)
     department = Column(String)
-    years_of_experience = Column(Integer)
     bio = Column(Text)
 
     # Contact
@@ -51,11 +42,6 @@ class RecruiterProfile(Base):
 
     # Social
     linkedin_url = Column(String)
-    github_url = Column(String)
-    twitter_url = Column(String)
-
-    # Preferences
-    language_preference = Column(String)
 
     # System
     profile_completed = Column(Boolean, default=False, nullable=False)
@@ -78,4 +64,4 @@ class RecruiterProfile(Base):
     deleted_at = Column(DateTime(timezone=True))
 
     user = relationship("User")
-    company = relationship("Company")
+    

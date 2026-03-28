@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, DateTime, Integer, String, Enum as SAEnum
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Enum as SAEnum
 from sqlalchemy.sql import func
 
 from app.database.session import Base
@@ -19,6 +19,8 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     role = Column(SAEnum(Role), nullable=False)
 
+    is_deleted = Column(Boolean, default=False, nullable=False)
+
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -28,6 +30,5 @@ class User(Base):
         DateTime(timezone=True),
         onupdate=func.now(),
     )
-    last_active_at = Column(
-        DateTime(timezone=True),
-    )
+    last_active_at = Column(DateTime(timezone=True))
+    deleted_at = Column(DateTime(timezone=True))

@@ -29,7 +29,6 @@ class ApplicantProfile(Base):
 
     # Personal
     first_name = Column(String)
-    middle_name = Column(String)
     last_name = Column(String)
     dob = Column(Date)
     gender = Column(String)
@@ -45,7 +44,6 @@ class ApplicantProfile(Base):
     # Education
     education_level = Column(String)
     degree_name = Column(String)
-    college_name = Column(String)
     university_name = Column(String)
     graduation_year = Column(Integer)
     gpa = Column(String)
@@ -63,7 +61,6 @@ class ApplicantProfile(Base):
     portfolio_url = Column(String)
     github_url = Column(String)
     linkedin_url = Column(String)
-    personal_website = Column(String)
 
     # System
     is_deleted = Column(Boolean, default=False, nullable=False)

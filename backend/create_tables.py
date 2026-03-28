@@ -3,7 +3,6 @@ from app.database.session import Base, engine
 from app.models.user import User
 from app.models.applicant_profile import ApplicantProfile
 from app.models.recruiter_profile import RecruiterProfile
-from app.models.company import Company
 from app.models.internship import Internship
 from app.models.application import Application
 from app.models.contact import ContactMessage
