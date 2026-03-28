@@ -3,11 +3,32 @@ import { Link } from 'react-router-dom'
 import { internshipService } from '../services/internships'
 import type { Internship } from '../services/internships'
 import { ApiError } from '../services/api'
+import { useToast } from '../context/ToastContext'
+
+function SkeletonCard() {
+  return (
+    <div className="border border-gray-200 rounded-lg p-6 animate-pulse">
+      <div className="flex items-start justify-between">
+        <div className="flex-1 space-y-2">
+          <div className="h-5 bg-gray-200 rounded w-1/2" />
+          <div className="h-4 bg-gray-200 rounded w-1/3" />
+          <div className="h-3 bg-gray-200 rounded w-1/4 mt-2" />
+        </div>
+        <div className="ml-4 flex flex-col gap-2">
+          <div className="h-9 w-32 bg-gray-200 rounded-lg" />
+          <div className="h-9 w-20 bg-gray-200 rounded-lg" />
+          <div className="h-9 w-20 bg-gray-200 rounded-lg" />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function RecruiterDashboard() {
   const [internships, setInternships] = useState<Internship[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const { success, error: toastError, confirm } = useToast()
 
   useEffect(() => {
     internshipService.getMine()
@@ -17,20 +38,18 @@ export function RecruiterDashboard() {
   }, [])
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Delete this internship posting?')) return
+    const ok = await confirm('Delete this internship posting? This cannot be undone.')
+    if (!ok) return
     try {
       await internshipService.delete(id)
       setInternships((prev) => prev.filter((i) => i.id !== id))
+      success('Internship deleted.')
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to delete.')
+      toastError(err instanceof ApiError ? err.message : 'Failed to delete.')
     }
   }
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-500">Loading dashboard...</p>
-    </div>
-  )
+  const totalActive = internships.filter((i) => i.is_active).length
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -50,23 +69,37 @@ export function RecruiterDashboard() {
           <div className="mb-6 p-3 bg-red-100 border border-red-400 text-red-800 rounded text-sm">{error}</div>
         )}
 
+        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-600 text-sm font-medium">Total Posted</p>
-            <p className="text-3xl font-bold text-gray-900 mt-2">{internships.length}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-600 text-sm font-medium">Active</p>
-            <p className="text-3xl font-bold text-gray-900 mt-2">
-              {internships.filter((i) => i.is_active).length}
-            </p>
-          </div>
+          {loading ? (
+            Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-lg shadow p-6 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-1/2 mb-3" />
+                <div className="h-8 bg-gray-200 rounded w-1/4" />
+              </div>
+            ))
+          ) : (
+            <>
+              <div className="bg-white rounded-lg shadow p-6">
+                <p className="text-gray-600 text-sm font-medium">Total Posted</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{internships.length}</p>
+              </div>
+              <div className="bg-white rounded-lg shadow p-6">
+                <p className="text-gray-600 text-sm font-medium">Active</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{totalActive}</p>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">My Internship Postings</h2>
 
-          {internships.length === 0 ? (
+          {loading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
+            </div>
+          ) : internships.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-gray-600 mb-4">You haven't posted any internships yet.</p>
               <Link to="/post-internship"

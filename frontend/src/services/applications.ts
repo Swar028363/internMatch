@@ -3,10 +3,18 @@ import type { Internship } from './internships'
 
 export type ApplicationStatus = 'applied' | 'accepted' | 'rejected' | 'withdrawn'
 
+export interface ApplicantSummary {
+  id: number
+  email: string
+  first_name: string | null
+  last_name: string | null
+}
+
 export interface Application {
   id: number
   internship_id: number
   applicant_id: number
+  applicant: ApplicantSummary | null
   cover_letter: string | null
   resume_path: string | null
   status: ApplicationStatus

@@ -47,7 +47,7 @@ class Application(Base):
     )
 
     cover_letter = Column(Text)
-    resume_path = Column(String)    # relative path inside UPLOAD_DIR
+    resume_path = Column(String)
 
     status = Column(
         SAEnum(ApplicationStatus),

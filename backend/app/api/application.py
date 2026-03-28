@@ -3,49 +3,54 @@ from pathlib import Path
 from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import UPLOAD_DIR, MAX_UPLOAD_BYTES
 from app.database.session import get_db
 from app.deps import get_current_user
 from app.models.user import User, Role
 from app.models.application import Application, ApplicationStatus
+from app.models.applicant_profile import ApplicantProfile
 from app.models.internship import Internship
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationResponse,
     ApplicationStatusUpdate,
     ApplicationWithInternship,
+    ApplicantSummary,
 )
+from app.utils.file_validation import is_valid_resume
 
 router = APIRouter(prefix="/applications", tags=["Applications"])
 
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
-ALLOWED_RESUME_TYPES = {
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-}
+
+def _enrich_with_applicant(application: Application, db: Session) -> ApplicationResponse:
+    profile = db.query(ApplicantProfile).filter(
+        ApplicantProfile.user_id == application.applicant_id,
+        ApplicantProfile.is_deleted.is_(False),
+    ).first()
+
+    summary = ApplicantSummary(
+        id=application.applicant.id,
+        email=application.applicant.email,
+        first_name=profile.first_name if profile else None,
+        last_name=profile.last_name if profile else None,
+    )
+
+    data = ApplicationResponse.model_validate(application)
+    data.applicant = summary
+    return data
 
 
-# Applicant: submit an application
-@router.post(
-    "",
-    response_model=ApplicationResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Apply for an internship",
-)
-def create_application(
-    data: ApplicationCreate,
-    db: DbSession,
-    current_user: CurrentUser,
-):
+# Applicant: submit
+@router.post("", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
+def create_application(data: ApplicationCreate, db: DbSession, current_user: CurrentUser):
     if current_user.role != Role.applicant:
         raise HTTPException(status_code=403, detail="Only applicants can apply")
 
-    # Check internship exists and is active
     internship = db.query(Internship).filter(
         Internship.id == data.internship_id,
         Internship.is_active.is_(True),
@@ -54,7 +59,6 @@ def create_application(
     if not internship:
         raise HTTPException(status_code=404, detail="Internship not found or no longer active")
 
-    # Prevent duplicate applications
     existing = db.query(Application).filter(
         Application.internship_id == data.internship_id,
         Application.applicant_id == current_user.id,
@@ -73,39 +77,27 @@ def create_application(
     return application
 
 
-# Applicant: list my own applications
-@router.get(
-    "/mine",
-    response_model=List[ApplicationWithInternship],
-    summary="Get all applications submitted by the current applicant",
-)
+# Applicant: list own applications
+@router.get("/mine", response_model=List[ApplicationWithInternship])
 def get_my_applications(db: DbSession, current_user: CurrentUser):
     if current_user.role != Role.applicant:
         raise HTTPException(status_code=403, detail="Only applicants can access this")
 
     return (
         db.query(Application)
+        .options(joinedload(Application.internship))
         .filter(Application.applicant_id == current_user.id)
         .order_by(Application.created_at.desc())
         .all()
     )
 
 
-# Recruiter: list applications for one of their internships
-@router.get(
-    "/internship/{internship_id}",
-    response_model=List[ApplicationResponse],
-    summary="Get all applications for a specific internship (recruiter only)",
-)
-def get_applications_for_internship(
-    internship_id: int,
-    db: DbSession,
-    current_user: CurrentUser,
-):
+# Recruiter: list applications for an internship
+@router.get("/internship/{internship_id}", response_model=List[ApplicationResponse])
+def get_applications_for_internship(internship_id: int, db: DbSession, current_user: CurrentUser):
     if current_user.role != Role.recruiter:
         raise HTTPException(status_code=403, detail="Only recruiters can access this")
 
-    # Verify they own the internship
     internship = db.query(Internship).filter(
         Internship.id == internship_id,
         Internship.posted_by == current_user.id,
@@ -114,34 +106,30 @@ def get_applications_for_internship(
     if not internship:
         raise HTTPException(status_code=404, detail="Internship not found")
 
-    return (
+    applications = (
         db.query(Application)
+        .options(joinedload(Application.applicant))
         .filter(Application.internship_id == internship_id)
         .order_by(Application.created_at.desc())
         .all()
     )
 
+    return [_enrich_with_applicant(app, db) for app in applications]
 
-# Shared: get a single application
-@router.get(
-    "/{application_id}",
-    response_model=ApplicationWithInternship,
-    summary="Get a single application",
-)
-def get_application(
-    application_id: int,
-    db: DbSession,
-    current_user: CurrentUser,
-):
-    application = db.query(Application).filter(
-        Application.id == application_id,
-    ).first()
+
+# Shared: get single application
+@router.get("/{application_id}", response_model=ApplicationWithInternship)
+def get_application(application_id: int, db: DbSession, current_user: CurrentUser):
+    application = (
+        db.query(Application)
+        .options(joinedload(Application.internship))
+        .filter(Application.id == application_id)
+        .first()
+    )
 
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
 
-    # Applicants can only see their own; recruiters can only see applications
-    # for internships they posted
     if current_user.role == Role.applicant:
         if application.applicant_id != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
@@ -152,36 +140,27 @@ def get_application(
     return application
 
 
-# Recruiter: update application status
-@router.patch(
-    "/{application_id}/status",
-    response_model=ApplicationResponse,
-    summary="Update application status (recruiter: accept/reject; applicant: withdraw)",
-)
+# Update status
+@router.patch("/{application_id}/status", response_model=ApplicationResponse)
 def update_status(
     application_id: int,
     data: ApplicationStatusUpdate,
     db: DbSession,
     current_user: CurrentUser,
 ):
-    application = db.query(Application).filter(
-        Application.id == application_id,
-    ).first()
+    application = db.query(Application).filter(Application.id == application_id).first()
 
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
 
     if current_user.role == Role.recruiter:
-        # Recruiter can only accept or reject
         if data.status not in (ApplicationStatus.accepted, ApplicationStatus.rejected):
-            raise HTTPException(status_code=400, detail="Recruiters can only set status to accepted or rejected")
+            raise HTTPException(status_code=400, detail="Recruiters can only accept or reject")
         if application.internship.posted_by != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
-
     elif current_user.role == Role.applicant:
-        # Applicant can only withdraw their own application
         if data.status != ApplicationStatus.withdrawn:
-            raise HTTPException(status_code=400, detail="Applicants can only withdraw their application")
+            raise HTTPException(status_code=400, detail="Applicants can only withdraw")
         if application.applicant_id != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
 
@@ -191,12 +170,8 @@ def update_status(
     return application
 
 
-# Applicant: upload resume for an application
-@router.post(
-    "/{application_id}/resume",
-    response_model=ApplicationResponse,
-    summary="Upload a resume for an application",
-)
+# Resume upload - with magic byte validation
+@router.post("/{application_id}/resume", response_model=ApplicationResponse)
 def upload_resume(
     application_id: int,
     file: UploadFile = File(...),
@@ -214,14 +189,17 @@ def upload_resume(
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
 
-    if file.content_type not in ALLOWED_RESUME_TYPES:
-        raise HTTPException(status_code=400, detail="Only PDF or Word documents are accepted")
-
     content = file.file.read()
+
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=400, detail="File exceeds the 5 MB limit")
 
-    # Build a unique filename and save
+    if not is_valid_resume(content):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Only PDF or Word documents (.pdf, .doc, .docx) are accepted.",
+        )
+
     suffix = Path(file.filename or "resume").suffix or ".pdf"
     filename = f"{current_user.id}_{application_id}_{uuid.uuid4().hex}{suffix}"
     save_path = UPLOAD_DIR / filename
