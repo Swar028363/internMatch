@@ -1,13 +1,15 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.core.config import ALLOWED_ORIGINS, UPLOAD_DIR
+from app.core.limiter import limiter
 from app.api.auth import router as auth_router
 from app.api.users import router as user_router
 from app.api.applicant_profile import router as applicant_profile_router
 from app.api.recruiter_profile import router as recruiter_profile_router
-from app.api.company import router as company_router
 from app.api.internship import router as internship_router
 from app.api.application import router as application_router
 from app.api.contact import router as contact_router
@@ -20,6 +22,11 @@ def create_app() -> FastAPI:
         description="Backend API for the InternMatch platform",
     )
 
+    # Rate limiting
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+    # CORS
     app.add_middleware(
         CORSMiddleware,
         allow_origins=ALLOWED_ORIGINS,
@@ -28,18 +35,32 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Security headers
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        # Only send HSTS over HTTPS - skip on localhost
+        if request.url.scheme == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+    # Static files
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
+    # Routers
     app.include_router(auth_router)
     app.include_router(user_router)
     app.include_router(applicant_profile_router)
     app.include_router(recruiter_profile_router)
-    app.include_router(company_router)
     app.include_router(internship_router)
     app.include_router(application_router)
     app.include_router(contact_router)
-
+    
     @app.get("/", tags=["Health"])
     def health_check() -> dict[str, str]:
         return {"status": "ok"}
