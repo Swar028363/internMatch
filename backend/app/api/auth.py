@@ -29,8 +29,9 @@ from app.core.security import (
 )
 from app.utils.otp import generate_otp, hash_otp, make_expiry
 from app.utils.pending_store import (
-    set_pending, get_pending, delete_pending, increment_attempts, MAX_ATTEMPTS
+    set_pending, get_pending, delete_pending, increment_attempts
 )
+from app.core.config import MAX_OTP_ATTEMPTS
 from app.utils.email import send_otp_email
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -109,7 +110,7 @@ def verify_otp(request: Request, data: VerifyOtpRequest, db: DbSession) -> Token
 
     if entry["otp_hash"] != hash_otp(data.otp):
         attempts = increment_attempts(key)
-        remaining = MAX_ATTEMPTS - attempts
+        remaining = MAX_OTP_ATTEMPTS - attempts
         if remaining <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -245,7 +246,7 @@ def reset_password(request: Request, data: ResetPasswordRequest, db: DbSession) 
 
     if entry["otp_hash"] != hash_otp(data.otp):
         attempts = increment_attempts(key)
-        remaining = MAX_ATTEMPTS - attempts
+        remaining = MAX_OTP_ATTEMPTS - attempts
         if remaining <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
