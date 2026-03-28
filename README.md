@@ -43,7 +43,7 @@ internmatch/
 
 - Python 3.11+
 - Node.js 18+
-- A [Resend](https://resend.com) account and API key (free tier)
+- A Gmail and App Password to send OTP
 
 ### Backend
 
@@ -114,8 +114,8 @@ The app will be available at `http://localhost:5173`.
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | No | SQLite in project root | SQLAlchemy connection string |
 | `ALLOWED_ORIGINS` | No | `http://localhost:5173` | Comma-separated list of allowed frontend origins |
-| `RESEND_API_KEY` | Yes | - | API key from resend.com |
-| `FROM_EMAIL` | No | `onboarding@resend.dev` | Sender address for OTP emails |
+| `GMAIL_USER` | Yes | example@gmail.com | Google account mail |
+| `GMAIL_APP_PASS` | Yes | - | App password from google account |
 | `UPLOAD_DIR` | No | `./uploads` | Directory for uploaded resume files |
 | `JWT_EXPIRE_SECONDS` | No | `3600` | Access token lifetime in seconds |
 | `OTP_EXPIRY_SECONDS` | No | `600` | How long the Otp is Valid in seconds |
