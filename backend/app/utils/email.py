@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def send_otp_email(to_email: str, otp: str, purpose: str = "verify") -> None:
     """
     Send an OTP email via Resend.
-    Raises Exception on failure — callers should handle it.
+    Raises Exception on failure - callers should handle it.
     """
     if purpose == "reset":
         subject = "Reset your InternMatch password"

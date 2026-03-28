@@ -7,7 +7,6 @@ from app.core.config import OTP_EXPIRY_SECONDS
 
 def generate_otp() -> str:
     """Generate a cryptographically random 6-digit OTP."""
-    # secrets.randbelow gives uniform distribution over [0, 1_000_000)
     import secrets
     return str(secrets.randbelow(1_000_000)).zfill(6)
 

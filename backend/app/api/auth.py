@@ -1,10 +1,11 @@
 from datetime import datetime, UTC
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
+from app.core.limiter import limiter
 from app.schemas.auth import (
     RegisterRequest,
     VerifyOtpRequest,
@@ -13,6 +14,7 @@ from app.schemas.auth import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
     TokenResponse,
+    RefreshRequest,
     MessageResponse,
 )
 from app.models.user import User, Role
@@ -22,9 +24,13 @@ from app.core.security import (
     hash_password,
     verify_password,
     create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
 )
-from app.utils.otp import generate_otp, hash_otp, make_expiry, is_expired
-from app.utils.pending_store import set_pending, get_pending, delete_pending
+from app.utils.otp import generate_otp, hash_otp, make_expiry
+from app.utils.pending_store import (
+    set_pending, get_pending, delete_pending, increment_attempts, MAX_ATTEMPTS
+)
 from app.utils.email import send_otp_email
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -33,23 +39,39 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 
 def _get_user_by_email(db: Session, email: str) -> User | None:
-    return db.query(User).filter(User.email == email).first()
+    return db.query(User).filter(
+        User.email == email,
+        User.is_deleted.is_(False),
+    ).first()
 
 
-# Step 1 of registration: validate input, send OTP
-@router.post(
-    "/register",
-    response_model=MessageResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Start registration — sends OTP to email",
-)
-def register_user(data: RegisterRequest, db: DbSession) -> MessageResponse:
-    # Block if email already has a verified account
+# Refesh token endpoint
+@router.post("/refresh")
+def refresh_token_endpoint(data: RefreshRequest):
+    token = data.refresh_token
+
+    if not token:
+        raise HTTPException(status_code=400, detail="Missing refresh token")
+    
+    try:
+        decoded = decode_refresh_token(token)
+
+        user_id = int(decoded.get("sub"))
+        role = decoded.get("role")
+
+        new_access_token = create_access_token(user_id, role)
+
+        return {"access_token": new_access_token}
+
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+# Register: send OTP
+@router.post("/register", response_model=MessageResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
+def register_user(request: Request, data: RegisterRequest, db: DbSession) -> MessageResponse:
     if _get_user_by_email(db, data.email):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     otp = generate_otp()
     set_pending(
@@ -72,15 +94,12 @@ def register_user(data: RegisterRequest, db: DbSession) -> MessageResponse:
     return MessageResponse(message="OTP sent to your email. It expires in 10 minutes.")
 
 
-# Step 2 of registration: verify OTP, create account
-@router.post(
-    "/verify-otp",
-    response_model=TokenResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Verify OTP and create account",
-)
-def verify_otp(data: VerifyOtpRequest, db: DbSession) -> TokenResponse:
-    entry = get_pending(f"reg:{data.email}")
+# Verify OTP: create account
+@router.post("/verify-otp", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
+def verify_otp(request: Request, data: VerifyOtpRequest, db: DbSession) -> TokenResponse:
+    key = f"reg:{data.email}"
+    entry = get_pending(key)
 
     if not entry:
         raise HTTPException(
@@ -89,20 +108,22 @@ def verify_otp(data: VerifyOtpRequest, db: DbSession) -> TokenResponse:
         )
 
     if entry["otp_hash"] != hash_otp(data.otp):
+        attempts = increment_attempts(key)
+        remaining = MAX_ATTEMPTS - attempts
+        if remaining <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Too many wrong attempts. Please register again.",
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid OTP.",
+            detail=f"Invalid OTP. {remaining} attempt{'s' if remaining != 1 else ''} remaining.",
         )
 
-    # Double-check email not registered between step 1 and step 2
     if _get_user_by_email(db, data.email):
-        delete_pending(f"reg:{data.email}")
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered.",
-        )
+        delete_pending(key)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered.")
 
-    # Create user
     user = User(
         email=data.email,
         password_hash=entry["password_hash"],
@@ -112,26 +133,23 @@ def verify_otp(data: VerifyOtpRequest, db: DbSession) -> TokenResponse:
     db.add(user)
     db.flush()
 
-    # Create role profile
     if user.role == Role.applicant:
         db.add(ApplicantProfile(user_id=user.id, last_active_at=datetime.now(UTC)))
     elif user.role == Role.recruiter:
         db.add(RecruiterProfile(user_id=user.id, profile_completed=False))
 
     db.commit()
-    delete_pending(f"reg:{data.email}")
+    delete_pending(key)
 
-    token = create_access_token(user.id, user.role)
-    return TokenResponse(access_token=token)
+    access_token = create_access_token(user.id, user.role)
+    refresh_token = create_refresh_token(user.id, user.role)
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
-# Resend OTP (works for both registration and password reset)
-@router.post(
-    "/resend-otp",
-    response_model=MessageResponse,
-    summary="Resend OTP",
-)
-def resend_otp(data: ResendOtpRequest, db: DbSession) -> MessageResponse:
+# Resend OTP
+@router.post("/resend-otp", response_model=MessageResponse)
+@limiter.limit("3/minute")
+def resend_otp(request: Request, data: ResendOtpRequest, db: DbSession) -> MessageResponse:
     if data.purpose == "verify":
         key = f"reg:{data.email}"
         entry = get_pending(key)
@@ -140,18 +158,7 @@ def resend_otp(data: ResendOtpRequest, db: DbSession) -> MessageResponse:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No pending registration found. Please register again.",
             )
-    else:
-        key = f"reset:{data.email}"
-        # For reset, we create a fresh entry if the user exists
-        user = _get_user_by_email(db, data.email)
-        if not user:
-            # Don't reveal whether email exists
-            return MessageResponse(message="If that email is registered, an OTP has been sent.")
-        entry = None  # will be created below
-
-    otp = generate_otp()
-
-    if data.purpose == "verify" and entry:
+        otp = generate_otp()
         set_pending(
             key=key,
             otp_hash=hash_otp(otp),
@@ -160,6 +167,11 @@ def resend_otp(data: ResendOtpRequest, db: DbSession) -> MessageResponse:
             role=entry["role"],
         )
     else:
+        key = f"reset:{data.email}"
+        user = _get_user_by_email(db, data.email)
+        if not user:
+            return MessageResponse(message="If that email is registered, an OTP has been sent.")
+        otp = generate_otp()
         set_pending(key=key, otp_hash=hash_otp(otp), expiry=make_expiry())
 
     try:
@@ -174,15 +186,12 @@ def resend_otp(data: ResendOtpRequest, db: DbSession) -> MessageResponse:
 
 
 # Login
-@router.post(
-    "/login",
-    response_model=TokenResponse,
-    summary="Login",
-)
-def login_user(data: LoginRequest, db: DbSession) -> TokenResponse:
+@router.post("/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
+def login_user(request: Request, data: LoginRequest, db: DbSession) -> TokenResponse:
     user = _get_user_by_email(db, data.email)
 
-    if not user or not verify_password(data.password, user.password_hash):
+    if not user or user.is_deleted or not verify_password(data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -191,20 +200,19 @@ def login_user(data: LoginRequest, db: DbSession) -> TokenResponse:
     user.last_active_at = datetime.now(UTC)
     db.commit()
 
-    token = create_access_token(user.id, user.role)
-    return TokenResponse(access_token=token)
+    access_token = create_access_token(user.id, user.role)
+    refresh_token = create_refresh_token(user.id, user.role)
+    print(refresh_token)
+    print(access_token)
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
-# Forgot password: send OTP
-@router.post(
-    "/forgot-password",
-    response_model=MessageResponse,
-    summary="Send password reset OTP",
-)
-def forgot_password(data: ForgotPasswordRequest, db: DbSession) -> MessageResponse:
+# Forgot password
+@router.post("/forgot-password", response_model=MessageResponse)
+@limiter.limit("3/minute")
+def forgot_password(request: Request, data: ForgotPasswordRequest, db: DbSession) -> MessageResponse:
     user = _get_user_by_email(db, data.email)
 
-    # Always return the same message - don't reveal whether email exists
     if not user:
         return MessageResponse(message="If that email is registered, an OTP has been sent.")
 
@@ -222,14 +230,12 @@ def forgot_password(data: ForgotPasswordRequest, db: DbSession) -> MessageRespon
     return MessageResponse(message="If that email is registered, an OTP has been sent.")
 
 
-# Reset password: verify OTP + set new password
-@router.post(
-    "/reset-password",
-    response_model=MessageResponse,
-    summary="Reset password using OTP",
-)
-def reset_password(data: ResetPasswordRequest, db: DbSession) -> MessageResponse:
-    entry = get_pending(f"reset:{data.email}")
+# Reset password
+@router.post("/reset-password", response_model=MessageResponse)
+@limiter.limit("5/minute")
+def reset_password(request: Request, data: ResetPasswordRequest, db: DbSession) -> MessageResponse:
+    key = f"reset:{data.email}"
+    entry = get_pending(key)
 
     if not entry:
         raise HTTPException(
@@ -238,9 +244,16 @@ def reset_password(data: ResetPasswordRequest, db: DbSession) -> MessageResponse
         )
 
     if entry["otp_hash"] != hash_otp(data.otp):
+        attempts = increment_attempts(key)
+        remaining = MAX_ATTEMPTS - attempts
+        if remaining <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Too many wrong attempts. Please request a new code.",
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid OTP.",
+            detail=f"Invalid OTP. {remaining} attempt{'s' if remaining != 1 else ''} remaining.",
         )
 
     user = _get_user_by_email(db, data.email)
@@ -249,6 +262,6 @@ def reset_password(data: ResetPasswordRequest, db: DbSession) -> MessageResponse
 
     user.password_hash = hash_password(data.new_password)
     db.commit()
-    delete_pending(f"reset:{data.email}")
+    delete_pending(key)
 
     return MessageResponse(message="Password reset successfully. You can now log in.")

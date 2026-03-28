@@ -5,20 +5,20 @@ Each entry expires after 10 minutes. The store is cleaned up lazily
 on every write so it never grows unbounded.
 
 Keys:
-  - "reg:{email}"   → pending registration
-  - "reset:{email}" → pending password reset
+  "reg:{email}"   -> pending registration
+  "reset:{email}" -> pending password reset
 
-This is intentionally simple — swap for Redis before scaling to
-multiple backend processes.
+Swap for Redis before scaling to multiple backend processes.
 """
 import time
 from typing import TypedDict
+from app.core.config import MAX_OTP_ATTEMPTS
 
 
 class PendingEntry(TypedDict):
     otp_hash: str
     expiry: int
-    # registration only
+    attempts: int
     password_hash: str | None
     role: str | None
 
@@ -33,13 +33,18 @@ def _purge_expired() -> None:
         del _store[k]
 
 
-def set_pending(key: str, otp_hash: str, expiry: int,
-                password_hash: str | None = None,
-                role: str | None = None) -> None:
+def set_pending(
+    key: str,
+    otp_hash: str,
+    expiry: int,
+    password_hash: str | None = None,
+    role: str | None = None,
+) -> None:
     _purge_expired()
     _store[key] = {
         "otp_hash": otp_hash,
         "expiry": expiry,
+        "attempts": 0,
         "password_hash": password_hash,
         "role": role,
     }
@@ -53,6 +58,24 @@ def get_pending(key: str) -> PendingEntry | None:
         del _store[key]
         return None
     return entry
+
+
+def increment_attempts(key: str) -> int:
+    """
+    Increment the wrong-guess counter.
+    Returns the new attempt count.
+    If MAX_OTP_ATTEMPTS is reached, the entry is deleted.
+    """
+    entry = _store.get(key)
+    if not entry:
+        return MAX_OTP_ATTEMPTS 
+
+    entry["attempts"] += 1
+    if entry["attempts"] >= MAX_OTP_ATTEMPTS:
+        del _store[key]
+        return MAX_OTP_ATTEMPTS
+
+    return entry["attempts"]
 
 
 def delete_pending(key: str) -> None:
