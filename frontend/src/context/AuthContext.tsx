@@ -10,9 +10,8 @@ export interface User {
 interface AuthContextType {
   user: User | null
   token: string | null
-  // Step 1 - sends OTP, returns nothing (throws on error)
+  loading: boolean
   sendRegisterOtp: (email: string, password: string, role: 'applicant' | 'recruiter') => Promise<void>
-  // Step 2 - verifies OTP, creates account, logs in
   verifyRegisterOtp: (email: string, otp: string) => Promise<void>
   login: (email: string, password: string) => Promise<void>
   logout: () => void
@@ -24,10 +23,15 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)  // true until session restore is done
 
   useEffect(() => {
     const storedToken = localStorage.getItem('authToken')
-    if (!storedToken) return
+    if (!storedToken) {
+      setLoading(false)  // no token - nothing to restore, done immediately
+      return
+    }
+
     setToken(storedToken)
     authService.getMe()
       .then((me) => setUser({ id: me.id, email: me.email, role: me.role }))
@@ -36,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(null)
         setUser(null)
       })
+      .finally(() => setLoading(false))  // always mark done, success or failure
   }, [])
 
   const _storeSession = (accessToken: string, userData: User) => {
@@ -49,7 +54,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     role: 'applicant' | 'recruiter',
   ) => {
-    // Just sends the OTP - throws ApiError on failure
     await authService.register({ email, password, role })
   }
 
@@ -75,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, token,
+      user, token, loading,
       sendRegisterOtp, verifyRegisterOtp,
       login, logout,
       isAuthenticated: !!token && !!user,

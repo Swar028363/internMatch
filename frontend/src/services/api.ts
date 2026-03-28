@@ -10,15 +10,56 @@ export class ApiError extends Error {
   }
 }
 
-function getToken(): string | null {
-  return localStorage.getItem('authToken')
+function getAccessToken(): string | null {
+  return localStorage.getItem('accessToken')
+}
+
+function getRefreshToken(): string | null {
+  return localStorage.getItem('refreshToken')
+}
+
+function handleExpiredSession(): void {
+  if (isLoggingOut) return
+  isLoggingOut = true
+
+  localStorage.removeItem('accessToken')
+  localStorage.removeItem('refreshToken')
+
+  const authPaths = ['/login', '/register', '/forgot-password']
+  if (!authPaths.some((p) => window.location.pathname.startsWith(p))) {
+    window.location.href = '/login'
+  }
+}
+
+let isLoggingOut = false
+
+async function tryRefresh(): Promise<string | null> {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) return null
+
+  try {
+    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+
+    if (!res.ok) return null
+
+    const data = await res.json()
+    localStorage.setItem('accessToken', data.access_token)
+
+    return data.access_token
+  } catch {
+    return null
+  }
 }
 
 async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = getToken()
+  const token = getAccessToken()
 
   const headers: Record<string, string> = {
     ...(options.body && !(options.body instanceof FormData)
@@ -32,6 +73,20 @@ async function request<T>(
     ...options,
     headers,
   })
+
+  if (response.status === 401 && token) {
+    const isAuthEndpoint = path.startsWith('/auth/')
+
+    if (!isAuthEndpoint) {
+      const newToken = await tryRefresh()
+
+      if (newToken) {
+        return request<T>(path, options)
+      }
+    }
+
+    handleExpiredSession()
+  }
 
   if (response.status === 204) {
     return undefined as T

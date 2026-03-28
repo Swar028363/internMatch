@@ -2,6 +2,7 @@ import { api } from './api'
 
 export interface TokenResponse {
   access_token: string
+  refresh_token: string
   token_type: string
 }
 
@@ -16,20 +17,29 @@ export interface MeResponse {
 }
 
 export const authService = {
-  // Step 1 - sends OTP, does NOT create account yet
   register: (payload: { email: string; password: string; role: 'applicant' | 'recruiter' }) =>
     api.post<MessageResponse>('/auth/register', payload),
 
-  // Step 2 - verifies OTP, creates account, returns token
-  verifyOtp: (payload: { email: string; otp: string }) =>
-    api.post<TokenResponse>('/auth/verify-otp', payload),
+  verifyOtp: async (payload: { email: string; otp: string }) => {
+    const res = await api.post<TokenResponse>('/auth/verify-otp', payload)
 
-  // Resend OTP for registration or password reset
+    localStorage.setItem('accessToken', res.access_token)
+    localStorage.setItem('refreshToken', res.refresh_token)
+
+    return res
+  },
+
   resendOtp: (payload: { email: string; purpose: 'verify' | 'reset' }) =>
     api.post<MessageResponse>('/auth/resend-otp', payload),
 
-  login: (payload: { email: string; password: string }) =>
-    api.post<TokenResponse>('/auth/login', payload),
+  login: async (payload: { email: string; password: string }) => {
+    const res = await api.post<TokenResponse>('/auth/login', payload)
+
+    localStorage.setItem('accessToken', res.access_token)
+    localStorage.setItem('refreshToken', res.refresh_token)
+
+    return res
+  },
 
   forgotPassword: (payload: { email: string }) =>
     api.post<MessageResponse>('/auth/forgot-password', payload),
