@@ -5,10 +5,12 @@ import type { Application } from '../services/applications'
 import { internshipService } from '../services/internships'
 import type { Internship } from '../services/internships'
 import { ApiError } from '../services/api'
+import { useToast } from '../context/ToastContext'
 
 export function InternshipManagement() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { success, error: toastError } = useToast()
 
   const [internship, setInternship] = useState<Internship | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
@@ -27,12 +29,13 @@ export function InternshipManagement() {
       .finally(() => setLoading(false))
   }, [id])
 
-  const handleStatus = async (appId: number, status: 'accepted' | 'rejected') => {
+  const handleStatus = async (appId: number, newStatus: 'accepted' | 'rejected') => {
     try {
-      const updated = await applicationService.updateStatus(appId, status)
+      const updated = await applicationService.updateStatus(appId, newStatus)
       setApplications((prev) => prev.map((a) => a.id === appId ? updated : a))
+      success(`Application ${newStatus}.`)
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to update status.')
+      toastError(err instanceof ApiError ? err.message : 'Failed to update status.')
     }
   }
 
@@ -43,15 +46,32 @@ export function InternshipManagement() {
     withdrawn: 'bg-gray-100 text-gray-600',
   }[status] ?? 'bg-gray-100 text-gray-800')
 
+  const getApplicantName = (app: Application) => {
+    const { applicant } = app
+    if (!applicant) return `Applicant #${app.applicant_id}`
+    const full = [applicant.first_name, applicant.last_name].filter(Boolean).join(' ')
+    return full || applicant.email
+  }
+
   const RESUME_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">Loading...</p></div>
-  if (error) return <div className="min-h-screen flex items-center justify-center"><p className="text-red-500">{error}</p></div>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-gray-500">Loading...</p>
+    </div>
+  )
+
+  if (error) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-red-500">{error}</p>
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
-        <button onClick={() => navigate('/dashboard/recruiter')} className="text-blue-600 hover:underline mb-6 inline-block">
+        <button onClick={() => navigate('/dashboard/recruiter')}
+          className="text-blue-600 hover:underline mb-6 inline-block">
           ← Back to Dashboard
         </button>
 
@@ -82,31 +102,38 @@ export function InternshipManagement() {
             <div className="space-y-4">
               {applications.map((app) => (
                 <div key={app.id} className="border border-gray-200 rounded-lg p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColor(app.status)}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
+                        <span className="text-base font-semibold text-gray-900">
+                          {getApplicantName(app)}
+                        </span>
+                        {app.applicant?.email && (
+                          <span className="text-sm text-gray-500">{app.applicant.email}</span>
+                        )}
+                        <span className={`px-3 py-0.5 rounded-full text-xs font-medium ${statusColor(app.status)}`}>
                           {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
                         </span>
-                        <span className="text-xs text-gray-500">
-                          Applied {new Date(app.created_at).toLocaleDateString()}
-                        </span>
                       </div>
+
+                      <p className="text-xs text-gray-400 mb-3">
+                        Applied {new Date(app.created_at).toLocaleDateString()}
+                      </p>
+
                       {app.cover_letter && (
-                        <p className="text-sm text-gray-700 mt-2 line-clamp-2">{app.cover_letter}</p>
+                        <p className="text-sm text-gray-700 line-clamp-2 mb-2">{app.cover_letter}</p>
                       )}
+
                       {app.resume_path && (
-                        <a
-                          href={`${RESUME_BASE}/uploads/${app.resume_path}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 hover:underline mt-2 inline-block"
-                        >
+                        <a href={`${RESUME_BASE}/uploads/${app.resume_path}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline">
                           View Resume
                         </a>
                       )}
                     </div>
-                    <div className="ml-4 flex flex-col gap-2">
+
+                    <div className="flex flex-col gap-2 flex-shrink-0">
                       <Link to={`/applicant-profile/${app.applicant_id}`}
                         className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 transition text-sm text-center">
                         View Profile

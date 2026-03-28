@@ -5,14 +5,15 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     JSON,
+    Numeric,
     String,
     Text,
+    Date,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.database.session import Base
-
 
 class Internship(Base):
     __tablename__ = "internships"
@@ -32,7 +33,12 @@ class Internship(Base):
     location = Column(String, nullable=False)
     job_type = Column(String, nullable=False)
     duration = Column(String)
-    salary = Column(String)
+
+    salary = Column(String)                       # display label (kept for compat)
+    stipend_amount = Column(Numeric(12, 2))       # numeric rupees per month, nullable
+
+    # Application deadline
+    deadline = Column(Date)
 
     skills = Column(JSON, default=list, nullable=False)
 
@@ -49,9 +55,4 @@ class Internship(Base):
         onupdate=func.now(),
     )
 
-    poster = relationship("User", backref="internships")
-    applications = relationship(
-        "Application",
-        back_populates="internship",
-        cascade="all, delete-orphan",
-    )
+    applications = relationship("Application", back_populates="internship")

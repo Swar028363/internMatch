@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { internshipService } from '../services/internships'
 import { ApiError } from '../services/api'
+import { normaliseSkill } from '../utils/skillAliases'
 
-const SKILL_SUGGESTIONS = ['React', 'JavaScript', 'TypeScript', 'Python', 'SQL',
-  'Node.js', 'Swift', 'Figma', 'UI Design', 'AWS', 'Machine Learning', 'Excel']
+const SKILL_SUGGESTIONS = [
+  'React', 'JavaScript', 'TypeScript', 'Python', 'SQL',
+  'Node.js', 'Swift', 'Figma', 'UI Design', 'AWS', 'Machine Learning', 'Excel',
+]
 
 export function EditInternship() {
   const { id } = useParams<{ id: string }>()
@@ -14,9 +17,11 @@ export function EditInternship() {
     title: '',
     description: '',
     location: '',
-    job_type: 'Internship',
+    job_type: 'onsite',
     duration: '',
     salary: '',
+    stipend_amount: '',
+    deadline: '',
   })
   const [skills, setSkills] = useState<string[]>([])
   const [skillInput, setSkillInput] = useState('')
@@ -35,6 +40,8 @@ export function EditInternship() {
           job_type: i.job_type,
           duration: i.duration ?? '',
           salary: i.salary ?? '',
+          stipend_amount: i.stipend_amount != null ? String(i.stipend_amount) : '',
+          deadline: i.deadline ?? '',
         })
         setSkills(i.skills ?? [])
       })
@@ -47,8 +54,10 @@ export function EditInternship() {
   }
 
   const addSkill = (skill: string) => {
-    const trimmed = skill.trim()
-    if (trimmed && !skills.includes(trimmed)) setSkills((prev) => [...prev, trimmed])
+    const norm = normaliseSkill(skill.trim())
+    if (norm && !skills.some((s) => s.toLowerCase() === norm.toLowerCase())) {
+      setSkills((prev) => [...prev, norm])
+    }
     setSkillInput('')
   }
 
@@ -62,13 +71,22 @@ export function EditInternship() {
       setError('Title, description, and location are required.')
       return
     }
+    if (formData.stipend_amount && isNaN(Number(formData.stipend_amount))) {
+      setError('Stipend amount must be a number.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
       await internshipService.update(Number(id), {
-        ...formData,
+        title: formData.title,
+        description: formData.description,
+        location: formData.location,
+        job_type: formData.job_type,
         duration: formData.duration || undefined,
         salary: formData.salary || undefined,
+        stipend_amount: formData.stipend_amount ? Number(formData.stipend_amount) : undefined,
+        deadline: formData.deadline || undefined,
         skills,
       })
       navigate('/dashboard/recruiter')
@@ -80,10 +98,15 @@ export function EditInternship() {
     }
   }
 
+  const today = new Date().toISOString().split('T')[0]
   const inputClass = 'mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
   const labelClass = 'block text-sm font-medium text-gray-700'
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">Loading...</p></div>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-gray-500">Loading...</p>
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -113,9 +136,9 @@ export function EditInternship() {
               <div>
                 <label className={labelClass}>Job Type</label>
                 <select name="job_type" value={formData.job_type} onChange={handleChange} className={inputClass}>
-                  <option>Internship</option>
-                  <option>Part-Time</option>
-                  <option>Remote</option>
+                  <option value="onsite">On-site</option>
+                  <option value="remote">Remote</option>
+                  <option value="hybrid">Hybrid</option>
                 </select>
               </div>
               <div>
@@ -123,8 +146,28 @@ export function EditInternship() {
                 <input name="duration" value={formData.duration} onChange={handleChange} className={inputClass} />
               </div>
               <div>
-                <label className={labelClass}>Salary / Stipend</label>
-                <input name="salary" value={formData.salary} onChange={handleChange} className={inputClass} />
+                <label className={labelClass}>Application Deadline</label>
+                {/* min={today} prevents setting past deadlines when editing */}
+                <input name="deadline" type="date" value={formData.deadline} onChange={handleChange}
+    className={inputClass} min={today} />
+              </div>
+            </div>
+
+            {/* Stipend */}
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+              <p className="text-sm font-medium text-gray-700">Stipend / Compensation</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Display Label</label>
+                  <input name="salary" value={formData.salary} onChange={handleChange}
+                    className={inputClass} placeholder="e.g. ₹12,000/month" />
+                </div>
+                <div>
+                  <label className={labelClass}>Amount (₹/month)</label>
+                  <input name="stipend_amount" type="number" min="0"
+                    value={formData.stipend_amount} onChange={handleChange}
+                    className={inputClass} placeholder="12000" />
+                </div>
               </div>
             </div>
 
@@ -141,9 +184,9 @@ export function EditInternship() {
               </div>
               <input value={skillInput} onChange={(e) => setSkillInput(e.target.value)}
                 onKeyDown={handleSkillKeyDown} className={inputClass}
-                placeholder="Type a skill and press Enter..." />
+                placeholder="Type a skill and press Enter or ," />
               <div className="flex flex-wrap gap-2 mt-2">
-                {SKILL_SUGGESTIONS.filter((s) => !skills.includes(s)).slice(0, 8).map((s) => (
+                {SKILL_SUGGESTIONS.filter((s) => !skills.some((x) => x.toLowerCase() === s.toLowerCase())).slice(0, 8).map((s) => (
                   <button type="button" key={s} onClick={() => addSkill(s)}
                     className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition">
                     + {s}

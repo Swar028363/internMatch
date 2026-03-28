@@ -6,12 +6,28 @@ import type { Internship } from '../services/internships'
 import { applicationService } from '../services/applications'
 import { ApiError } from '../services/api'
 
+function formatDeadline(deadline: string | null | undefined): { label: string; color: string } | null {
+  if (!deadline) return null
+  const d = new Date(deadline)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  d.setHours(0, 0, 0, 0)
+  const diffDays = Math.floor((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDays < 0) return { label: 'Closed', color: 'text-red-600' }
+  if (diffDays <= 7) {
+    const formatted = new Date(deadline).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+    return { label: `Closes ${formatted}`, color: 'text-orange-600' }
+  }
+  const formatted = new Date(deadline).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  return { label: `Deadline: ${formatted}`, color: 'text-gray-500' }
+}
+
 export default function InternshipDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  const [internship, setInternship] = useState<Internship | null>(null)
+  const [internship, setInternship] = useState<Internship & { deadline_passed?: boolean } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -57,24 +73,40 @@ export default function InternshipDetails() {
     }
     setApplyLoading(true)
     setApplyError('')
+
+    let application: Awaited<ReturnType<typeof applicationService.apply>> | null = null
+
+    // Step 1: create application
     try {
-      const application = await applicationService.apply({
+      application = await applicationService.apply({
         internship_id: Number(id),
         cover_letter: coverLetter || undefined,
       })
+    } catch (err) {
+      setApplyError(err instanceof ApiError ? err.message : 'Failed to submit application.')
+      setApplyLoading(false)
+      return
+    }
+
+    // Step 2: upload resume
+    try {
       await applicationService.uploadResume(application.id, resume)
       setApplied(true)
       setShowApply(false)
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setApplyError(err.message)
-      } else {
-        setApplyError('Failed to submit application.')
-      }
+    } catch (_err) {
+      // Application created but resume upload failed - inform user
+      setApplied(true)
+      setShowApply(false)
+      setApplyError('Application submitted, but resume upload failed. Please re-upload your resume from your dashboard.')
     } finally {
       setApplyLoading(false)
     }
   }
+
+  const deadlineInfo = internship ? formatDeadline(internship.deadline) : null
+  const deadlinePassed = internship?.deadline_passed ?? (internship?.deadline
+    ? new Date(internship.deadline) < new Date(new Date().toDateString())
+    : false)
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -110,12 +142,22 @@ export default function InternshipDetails() {
                 {internship.duration ? ` · ${internship.duration}` : ''}
                 {internship.salary ? ` · ${internship.salary}` : ''}
               </p>
+              {/* Deadline line */}
+              {deadlineInfo && (
+                <p className={`text-sm font-medium mt-2 ${deadlineInfo.color}`}>
+                  {deadlineInfo.label}
+                </p>
+              )}
             </div>
             {user?.role === 'applicant' && (
               <div>
                 {applied ? (
                   <span className="px-4 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium">
                     ✓ Applied
+                  </span>
+                ) : deadlinePassed ? (
+                  <span className="px-4 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-medium">
+                    Applications closed
                   </span>
                 ) : (
                   <button
@@ -128,6 +170,13 @@ export default function InternshipDetails() {
               </div>
             )}
           </div>
+
+          {/* Resume warning (shown after modal closes if upload failed) */}
+          {applied && applyError && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-300 text-yellow-800 rounded text-sm">
+              {applyError}
+            </div>
+          )}
 
           <div className="border-t border-gray-200 pt-6 space-y-6">
             <div>
@@ -155,7 +204,7 @@ export default function InternshipDetails() {
         </div>
       </div>
 
-      {/* Apply Modal */}
+      {/* Apply Modal (unchanged) */}
       {showApply && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
