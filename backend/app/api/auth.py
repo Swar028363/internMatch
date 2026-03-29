@@ -203,8 +203,6 @@ def login_user(request: Request, data: LoginRequest, db: DbSession) -> TokenResp
 
     access_token = create_access_token(user.id, user.role)
     refresh_token = create_refresh_token(user.id, user.role)
-    print(refresh_token)
-    print(access_token)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
