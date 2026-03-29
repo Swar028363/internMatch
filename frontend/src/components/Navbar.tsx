@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/useAuth'
 import { DefaultAvatar } from './DefaultAvatar'
+import logo from "../assets/IM.png";
 
 export default function Navbar() {
   const { isAuthenticated, user, logout } = useAuth()
@@ -57,9 +58,12 @@ export default function Navbar() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-4 flex items-center justify-between">
 
         {/* Logo */}
-        <Link to="/" className="text-lg font-semibold text-gray-900 shrink-0">
-          InternMatch
-        </Link>
+        <div className="flex items-center gap-2">
+          <img className="h-8 w-8 object-contain" src={logo} alt="Logo" />
+          <Link to="/" className="text-lg font-semibold text-gray-900">
+            InternMatch
+          </Link>
+        </div>
 
         {/* Desktop nav */}
         <nav className="hidden md:flex gap-6">
