@@ -7,11 +7,27 @@ import type { Internship } from '../services/internships'
 import { ApiError } from '../services/api'
 import { useToast } from '../context/ToastContext'
 
+const handleDownloadResume = async (url: string) => {
+  try {
+    const response = await fetch(url)
+    const blob = await response.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = url.split('/').pop() || 'resume'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(blobUrl)
+  } catch {
+    window.open(url, '_blank')
+  }
+}
+
 export function InternshipManagement() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { success, error: toastError } = useToast()
-
   const [internship, setInternship] = useState<Internship | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
@@ -53,8 +69,6 @@ export function InternshipManagement() {
     return full || applicant.email
   }
 
-  const RESUME_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
-
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-gray-500">Loading...</p>
@@ -74,12 +88,10 @@ export function InternshipManagement() {
           className="text-blue-600 hover:underline mb-6 inline-block">
           ← Back to Dashboard
         </button>
-
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">{internship?.title}</h1>
           <p className="text-gray-600 mt-1">{internship?.location}</p>
         </div>
-
         <div className="grid grid-cols-3 gap-6 mb-8">
           {[
             { label: 'Total', value: applications.length, color: 'text-gray-900' },
@@ -92,10 +104,8 @@ export function InternshipManagement() {
             </div>
           ))}
         </div>
-
         <div className="bg-white rounded-lg shadow-md p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Applicants</h2>
-
           {applications.length === 0 ? (
             <p className="text-center text-gray-600 py-12">No applications yet.</p>
           ) : (
@@ -115,37 +125,53 @@ export function InternshipManagement() {
                           {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
                         </span>
                       </div>
-
                       <p className="text-xs text-gray-400 mb-3">
                         Applied {new Date(app.created_at).toLocaleDateString()}
                       </p>
-
                       {app.cover_letter && (
-                        <p className="text-sm text-gray-700 line-clamp-2 mb-2">{app.cover_letter}</p>
+                        <p className="text-sm text-gray-700 line-clamp-2 mb-3">{app.cover_letter}</p>
                       )}
-
-                      {app.resume_path && (
-                        <a href={`${RESUME_BASE}/uploads/${app.resume_path}`}
-                          target="_blank" rel="noopener noreferrer"
-                          className="text-sm text-blue-600 hover:underline">
-                          View Resume
-                        </a>
+                      {app.resume_path ? (
+                        app.resume_path.toLowerCase().endsWith('.pdf') ? (
+                          <a
+                            href={app.resume_path}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-600 hover:underline"
+                          >
+                            View Resume
+                          </a>
+                        ) : (
+                          <button
+                            onClick={() => handleDownloadResume(app.resume_path!)}
+                            className="text-sm text-blue-600 hover:underline"
+                          >
+                            Download Resume
+                          </button>
+                        )
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">No resume uploaded</span>
                       )}
                     </div>
-
                     <div className="flex flex-col gap-2 flex-shrink-0">
-                      <Link to={`/applicant-profile/${app.applicant_id}`}
-                        className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 transition text-sm text-center">
+                      <Link
+                        to={`/applicant-profile/${app.applicant_id}`}
+                        className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 transition text-sm text-center"
+                      >
                         View Profile
                       </Link>
                       {app.status === 'applied' && (
                         <>
-                          <button onClick={() => handleStatus(app.id, 'accepted')}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
+                          <button
+                            onClick={() => handleStatus(app.id, 'accepted')}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
+                          >
                             Accept
                           </button>
-                          <button onClick={() => handleStatus(app.id, 'rejected')}
-                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm">
+                          <button
+                            onClick={() => handleStatus(app.id, 'rejected')}
+                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+                          >
                             Reject
                           </button>
                         </>

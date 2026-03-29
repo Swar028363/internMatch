@@ -16,7 +16,7 @@ export interface Application {
   applicant_id: number
   applicant: ApplicantSummary | null
   cover_letter: string | null
-  resume_path: string | null
+  resume_path: string | null  // storage path e.g. "user_2/internship_1/resume.pdf", NOT a URL
   status: ApplicationStatus
   created_at: string
   updated_at: string | null
@@ -52,4 +52,6 @@ export const applicationService = {
     form.append('file', file)
     return api.upload<Application>(`/applications/${applicationId}/resume`, form)
   },
+  getResumeUrl: (applicationId: number) =>
+    api.get<{ url: string }>(`/applications/${applicationId}/resume-url`),
 }

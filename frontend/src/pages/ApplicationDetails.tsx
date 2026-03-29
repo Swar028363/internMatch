@@ -3,10 +3,26 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { applicationService } from '../services/applications'
 import type { ApplicationWithInternship } from '../services/applications'
 
+const handleDownloadResume = async (url: string) => {
+  try {
+    const response = await fetch(url)
+    const blob = await response.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = url.split('/').pop() || 'resume'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(blobUrl)
+  } catch {
+    window.open(url, '_blank')
+  }
+}
+
 export function ApplicationDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-
   const [application, setApplication] = useState<ApplicationWithInternship | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -26,14 +42,15 @@ export function ApplicationDetails() {
     withdrawn: 'bg-gray-100 text-gray-600',
   }[status] ?? 'bg-gray-100 text-gray-800')
 
-  const RESUME_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
-
   if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">Loading...</p></div>
+
   if (error || !application) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
         <p className="text-gray-600 mb-4">{error}</p>
-        <button onClick={() => navigate(-1)} className="text-blue-600 hover:underline">← Go back</button>
+        <button onClick={() => navigate(-1)} className="text-blue-600 hover:underline">
+          Go back
+        </button>
       </div>
     </div>
   )
@@ -46,7 +63,6 @@ export function ApplicationDetails() {
         <button onClick={() => navigate(-1)} className="text-blue-600 hover:underline mb-6 inline-block">
           ← Back
         </button>
-
         <div className="bg-white rounded-lg shadow-md p-8 space-y-6">
           <div className="flex items-start justify-between">
             <div>
@@ -58,7 +74,6 @@ export function ApplicationDetails() {
               {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
             </span>
           </div>
-
           <div className="border-t border-gray-200 pt-6 space-y-4">
             <div>
               <p className="text-sm font-medium text-gray-600">Applied on</p>
@@ -66,25 +81,32 @@ export function ApplicationDetails() {
                 year: 'numeric', month: 'long', day: 'numeric'
               })}</p>
             </div>
-
             {application.cover_letter && (
               <div>
                 <p className="text-sm font-medium text-gray-600">Cover Letter</p>
                 <p className="text-gray-900 mt-1 whitespace-pre-wrap">{application.cover_letter}</p>
               </div>
             )}
-
             {application.resume_path ? (
               <div>
                 <p className="text-sm font-medium text-gray-600">Resume</p>
-                <a
-                  href={`${RESUME_BASE}/uploads/${application.resume_path}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1 inline-block text-blue-600 hover:underline"
-                >
-                  View Resume
-                </a>
+                {application.resume_path.toLowerCase().endsWith('.pdf') ? (
+                  <a
+                    href={application.resume_path}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-block text-blue-600 hover:underline"
+                  >
+                    View Resume
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => handleDownloadResume(application.resume_path!)}
+                    className="mt-1 inline-block text-blue-600 hover:underline"
+                  >
+                    Download Resume
+                  </button>
+                )}
               </div>
             ) : (
               <div>
@@ -93,7 +115,6 @@ export function ApplicationDetails() {
               </div>
             )}
           </div>
-
           <div className="border-t border-gray-200 pt-6">
             <h2 className="text-base font-semibold text-gray-900 mb-3">About the Role</h2>
             <p className="text-gray-700 text-sm whitespace-pre-wrap line-clamp-4">{internship.description}</p>
