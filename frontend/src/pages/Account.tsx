@@ -368,8 +368,8 @@ export function Account() {
           gpa: gpa || null,
           skills: normalisedSkills,
           portfolio_url: portfolioUrl || null,
-          languages_spoken: normalisedLanguages.length ? normalisedLanguages : null,
-          hobbies: normalisedHobbies.length ? normalisedHobbies : null,
+          languages_spoken: normalisedLanguages.length ? normalisedLanguages : undefined,
+          hobbies: normalisedHobbies.length ? normalisedHobbies : undefined,
         }
         const updated = await profileService.updateApplicantProfile(payload)
         setSkills(normalisedSkills.join(', '))
