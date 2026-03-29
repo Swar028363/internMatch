@@ -5,7 +5,8 @@ from typing import Annotated, List
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.config import UPLOAD_DIR, MAX_UPLOAD_BYTES
+from app.core.config import MAX_UPLOAD_BYTES
+from app.core.supabase_client import get_supabase_client
 from app.database.session import get_db
 from app.deps import get_current_user
 from app.models.user import User, Role
@@ -45,7 +46,6 @@ def _enrich_with_applicant(application: Application, db: Session) -> Application
     return data
 
 
-# Applicant: submit
 @router.post("", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 def create_application(data: ApplicationCreate, db: DbSession, current_user: CurrentUser):
     if current_user.role != Role.applicant:
@@ -77,7 +77,6 @@ def create_application(data: ApplicationCreate, db: DbSession, current_user: Cur
     return application
 
 
-# Applicant: list own applications
 @router.get("/mine", response_model=List[ApplicationWithInternship])
 def get_my_applications(db: DbSession, current_user: CurrentUser):
     if current_user.role != Role.applicant:
@@ -92,7 +91,6 @@ def get_my_applications(db: DbSession, current_user: CurrentUser):
     )
 
 
-# Recruiter: list applications for an internship
 @router.get("/internship/{internship_id}", response_model=List[ApplicationResponse])
 def get_applications_for_internship(internship_id: int, db: DbSession, current_user: CurrentUser):
     if current_user.role != Role.recruiter:
@@ -117,7 +115,6 @@ def get_applications_for_internship(internship_id: int, db: DbSession, current_u
     return [_enrich_with_applicant(app, db) for app in applications]
 
 
-# Shared: get single application
 @router.get("/{application_id}", response_model=ApplicationWithInternship)
 def get_application(application_id: int, db: DbSession, current_user: CurrentUser):
     application = (
@@ -140,7 +137,6 @@ def get_application(application_id: int, db: DbSession, current_user: CurrentUse
     return application
 
 
-# Update status
 @router.patch("/{application_id}/status", response_model=ApplicationResponse)
 def update_status(
     application_id: int,
@@ -165,12 +161,26 @@ def update_status(
             raise HTTPException(status_code=403, detail="Access denied")
 
     application.status = data.status
+
+    if data.status == ApplicationStatus.withdrawn:
+        db.delete(application)
+        db.commit()
+        return ApplicationResponse(
+            id=application.id,
+            internship_id=application.internship_id,
+            applicant_id=application.applicant_id,
+            cover_letter=application.cover_letter,
+            resume_path=application.resume_path,
+            status=application.status,
+            created_at=application.created_at,
+            updated_at=application.updated_at,
+        )
+
     db.commit()
     db.refresh(application)
     return application
 
 
-# Resume upload - with magic byte validation
 @router.post("/{application_id}/resume", response_model=ApplicationResponse)
 def upload_resume(
     application_id: int,
@@ -200,14 +210,28 @@ def upload_resume(
             detail="Invalid file type. Only PDF or Word documents (.pdf, .doc, .docx) are accepted.",
         )
 
-    suffix = Path(file.filename or "resume").suffix or ".pdf"
-    filename = f"{current_user.id}_{application_id}_{uuid.uuid4().hex}{suffix}"
-    save_path = UPLOAD_DIR / filename
+    try:
+        supabase = get_supabase_client()
 
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    save_path.write_bytes(content)
+        # Upload and get back the storage path e.g. "user_2/internship_1/resume.pdf"
+        storage_path = supabase.upload_resume(
+            user_id=current_user.id,
+            internship_id=application.internship_id,  # use internship_id, not app_id
+            file_content=content,
+            filename=file.filename or "resume.pdf",
+        )
 
-    application.resume_path = filename
-    db.commit()
-    db.refresh(application)
-    return application
+        # Store the full public URL so the frontend can use it directly
+        public_url = supabase.get_public_url(storage_path)
+        application.resume_path = public_url
+
+        db.commit()
+        db.refresh(application)
+        return application
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")

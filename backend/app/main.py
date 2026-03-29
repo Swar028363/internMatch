@@ -1,10 +1,9 @@
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.core.config import ALLOWED_ORIGINS, UPLOAD_DIR
+from app.core.config import ALLOWED_ORIGINS
 from app.core.limiter import limiter
 from app.api.auth import router as auth_router
 from app.api.users import router as user_router
@@ -13,7 +12,6 @@ from app.api.recruiter_profile import router as recruiter_profile_router
 from app.api.internship import router as internship_router
 from app.api.application import router as application_router
 from app.api.contact import router as contact_router
-
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -48,10 +46,6 @@ def create_app() -> FastAPI:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
-    # Static files
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
-
     # Routers
     app.include_router(auth_router)
     app.include_router(user_router)
@@ -60,12 +54,11 @@ def create_app() -> FastAPI:
     app.include_router(internship_router)
     app.include_router(application_router)
     app.include_router(contact_router)
-    
+
     @app.get("/", tags=["Health"])
     def health_check() -> dict[str, str]:
         return {"status": "ok"}
 
     return app
-
 
 app = create_app()
