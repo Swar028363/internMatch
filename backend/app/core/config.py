@@ -19,15 +19,8 @@ MAX_OTP_ATTEMPTS = int(os.getenv("MAX_OTP_ATTEMPTS", 5))
 OTP_EXPIRY_SECONDS = int(os.getenv("OTP_EXPIRY_SECONDS", 600))
 
 # JWT
-JWT_PRIVATE_KEY_PATH = Path(os.getenv("JWT_PRIVATE_KEY_PATH"))
-JWT_PUBLIC_KEY_PATH= Path(os.getenv("JWT_PUBLIC_KEY_PATH"))
-
-
-if not JWT_PRIVATE_KEY_PATH.exists() or not JWT_PUBLIC_KEY_PATH.exists():
-    raise RuntimeError("JWT key files not found. Run the key-generation script first.")
-
-JWT_PRIVATE_KEY = JWT_PRIVATE_KEY_PATH.read_bytes()
-JWT_PUBLIC_KEY = JWT_PUBLIC_KEY_PATH.read_bytes()
+JWT_PRIVATE_KEY = os.getenv("JWT_PRIVATE_KEY")
+JWT_PUBLIC_KEY = os.getenv("JWT_PUBLIC_KEY")
 
 # CORS
 _origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
