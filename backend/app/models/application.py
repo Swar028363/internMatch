@@ -1,6 +1,7 @@
 import enum
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Enum as SAEnum,
@@ -48,6 +49,7 @@ class Application(Base):
 
     cover_letter = Column(Text)
     resume_path = Column(String)
+    is_deleted = Column(Boolean, nullable=False, default=False)
 
     status = Column(
         SAEnum(ApplicationStatus),
