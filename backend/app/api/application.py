@@ -1,7 +1,8 @@
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_
 from pydantic import BaseModel
 
 from app.core.config import MAX_UPLOAD_BYTES
@@ -28,7 +29,6 @@ router = APIRouter(prefix="/applications", tags=["Applications"])
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
-
 class PaginatedApplicationsResponse(BaseModel):
     items: List[ApplicationWithInternship]
     total: int
@@ -38,7 +38,6 @@ class PaginatedApplicationsResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
 class PaginatedApplicationResponse(BaseModel):
     items: List[ApplicationResponse]
     total: int
@@ -47,7 +46,6 @@ class PaginatedApplicationResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
 
 def _enrich_with_applicant(application: Application, db: Session) -> ApplicationResponse:
     profile = db.query(ApplicantProfile).filter(
@@ -65,7 +63,6 @@ def _enrich_with_applicant(application: Application, db: Session) -> Application
     data = ApplicationResponse.model_validate(application)
     data.applicant = summary
     return data
-
 
 @router.post("", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 def create_application(data: ApplicationCreate, db: DbSession, current_user: CurrentUser):
@@ -97,11 +94,11 @@ def create_application(data: ApplicationCreate, db: DbSession, current_user: Cur
     db.refresh(application)
     return application
 
-
 @router.get("/mine", response_model=PaginatedApplicationsResponse)
 def get_my_applications(
     db: DbSession,
     current_user: CurrentUser,
+    search: Optional[str] = Query(default=None),
     limit: int = Query(default=10, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -114,17 +111,26 @@ def get_my_applications(
         .filter(Application.applicant_id == current_user.id)
         .order_by(Application.created_at.desc())
     )
+
+    if search:
+        matching_ids = (
+            db.query(Internship.id)
+            .filter(Internship.title.ilike(f"%{search}%"))
+            .subquery()
+        )
+        q = q.filter(Application.internship_id.in_(matching_ids))
+
     total = q.count()
     items = q.offset(offset).limit(limit).all()
 
     return PaginatedApplicationsResponse(items=items, total=total, limit=limit, offset=offset)
-
 
 @router.get("/internship/{internship_id}", response_model=PaginatedApplicationResponse)
 def get_applications_for_internship(
     internship_id: int,
     db: DbSession,
     current_user: CurrentUser,
+    search: Optional[str] = Query(default=None),
     limit: int = Query(default=10, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -145,6 +151,23 @@ def get_applications_for_internship(
         .filter(Application.internship_id == internship_id)
         .order_by(Application.created_at.desc())
     )
+
+    if search:
+        search_term = f"%{search}%"
+        matching_applicant_ids = (
+            db.query(User.id)
+            .outerjoin(ApplicantProfile, User.id == ApplicantProfile.user_id)
+            .filter(
+                or_(
+                    User.email.ilike(search_term),
+                    ApplicantProfile.first_name.ilike(search_term),
+                    ApplicantProfile.last_name.ilike(search_term),
+                )
+            )
+            .subquery()
+        )
+        q = q.filter(Application.applicant_id.in_(matching_applicant_ids))
+
     total = q.count()
     applications = q.offset(offset).limit(limit).all()
 
@@ -154,7 +177,6 @@ def get_applications_for_internship(
         limit=limit,
         offset=offset,
     )
-
 
 @router.get("/{application_id}", response_model=ApplicationWithInternship)
 def get_application(application_id: int, db: DbSession, current_user: CurrentUser):
@@ -176,7 +198,6 @@ def get_application(application_id: int, db: DbSession, current_user: CurrentUse
             raise HTTPException(status_code=403, detail="Access denied")
 
     return application
-
 
 @router.patch("/{application_id}/status", response_model=ApplicationResponse)
 def update_status(
@@ -243,7 +264,6 @@ def update_status(
     db.commit()
     db.refresh(application)
     return application
-
 
 @router.post("/{application_id}/resume", response_model=ApplicationResponse)
 def upload_resume(

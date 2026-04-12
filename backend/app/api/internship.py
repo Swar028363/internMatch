@@ -23,7 +23,6 @@ router = APIRouter(prefix="/internships", tags=["Internships"])
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
-
 # Public: list all active internships (filters + pagination)
 @router.get("", response_model=PaginatedInternshipResponse, summary="List internships")
 def list_internships(
@@ -75,7 +74,6 @@ def list_internships(
         items=items, total=total, limit=limit, offset=offset
     )
 
-
 def _apply_sort(query, sort_by: Optional[str]):
     if sort_by == "oldest":
         return query.order_by(Internship.created_at.asc())
@@ -87,7 +85,6 @@ def _apply_sort(query, sort_by: Optional[str]):
         return query.order_by(Internship.duration.asc().nullslast())
     return query.order_by(Internship.created_at.desc())
 
-
 # Recruiter: list MY postings (paginated)
 @router.get(
     "/mine",
@@ -97,6 +94,7 @@ def _apply_sort(query, sort_by: Optional[str]):
 def get_my_internships(
     db: DbSession,
     current_user: CurrentUser,
+    search: Optional[str] = Query(default=None),
     limit: int = Query(default=10, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -109,13 +107,16 @@ def get_my_internships(
             Internship.posted_by == current_user.id,
             Internship.is_deleted.is_(False),
         )
-        .order_by(Internship.created_at.desc())
     )
+
+    if search:
+        q = q.filter(Internship.title.ilike(f"%{search}%"))
+
+    q = q.order_by(Internship.created_at.desc())
     total = q.count()
     items = q.offset(offset).limit(limit).all()
 
     return PaginatedInternshipResponse(items=items, total=total, limit=limit, offset=offset)
-
 
 # Public: single internship
 @router.get("/{internship_id}", summary="Get internship by ID")
@@ -139,7 +140,6 @@ def get_internship(internship_id: int, db: DbSession):
     )
     return result
 
-
 # Recruiter: create
 @router.post(
     "",
@@ -157,7 +157,6 @@ def create_internship(data: InternshipCreate, db: DbSession, current_user: Curre
     db.refresh(internship)
     return internship
 
-
 # Recruiter: update
 @router.put("/{internship_id}", response_model=InternshipResponse, summary="Update an internship")
 def update_internship(
@@ -173,7 +172,6 @@ def update_internship(
     db.refresh(internship)
     return internship
 
-
 # Recruiter: soft-delete
 @router.delete("/{internship_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete an internship")
 def delete_internship(internship_id: int, db: DbSession, current_user: CurrentUser):
@@ -181,7 +179,6 @@ def delete_internship(internship_id: int, db: DbSession, current_user: CurrentUs
     internship.is_deleted = True
     internship.updated_at = func.now()
     db.commit()
-
 
 def _get_own_internship(internship_id: int, current_user: User, db: Session) -> Internship:
     if current_user.role != Role.recruiter:

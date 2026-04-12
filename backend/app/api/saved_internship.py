@@ -1,4 +1,4 @@
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
@@ -16,7 +16,6 @@ router = APIRouter(prefix="/saved", tags=["Saved Internships"])
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
-
 class PaginatedSavedResponse(BaseModel):
     items: List[SavedInternshipResponse]
     total: int
@@ -26,11 +25,11 @@ class PaginatedSavedResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
 @router.get("", response_model=PaginatedSavedResponse)
 def get_saved(
     db: DbSession,
     current_user: CurrentUser,
+    search: Optional[str] = Query(default=None),
     limit: int = Query(default=10, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -43,11 +42,19 @@ def get_saved(
         .filter(SavedInternship.user_id == current_user.id)
         .order_by(SavedInternship.created_at.desc())
     )
+
+    if search:
+        matching_ids = (
+            db.query(Internship.id)
+            .filter(Internship.title.ilike(f"%{search}%"))
+            .subquery()
+        )
+        q = q.filter(SavedInternship.internship_id.in_(matching_ids))
+
     total = q.count()
     items = q.offset(offset).limit(limit).all()
 
     return PaginatedSavedResponse(items=items, total=total, limit=limit, offset=offset)
-
 
 @router.post("", response_model=SavedInternshipResponse, status_code=status.HTTP_201_CREATED)
 def save_internship(data: SavedInternshipCreate, db: DbSession, current_user: CurrentUser):
@@ -74,7 +81,6 @@ def save_internship(data: SavedInternshipCreate, db: DbSession, current_user: Cu
     db.refresh(saved)
     return db.query(SavedInternship).options(joinedload(SavedInternship.internship)).filter(SavedInternship.id == saved.id).first()
 
-
 @router.delete("/{internship_id}", status_code=status.HTTP_204_NO_CONTENT)
 def unsave_internship(internship_id: int, db: DbSession, current_user: CurrentUser):
     saved = db.query(SavedInternship).filter(
@@ -85,7 +91,6 @@ def unsave_internship(internship_id: int, db: DbSession, current_user: CurrentUs
         raise HTTPException(status_code=404, detail="Not saved")
     db.delete(saved)
     db.commit()
-
 
 @router.get("/ids", response_model=List[int])
 def get_saved_ids(db: DbSession, current_user: CurrentUser):

@@ -12,9 +12,9 @@ from app.models.internship import Internship
 from app.models.application import Application
 from app.models.recruiter_profile import RecruiterProfile
 from app.schemas.admin import (
-    AdminInviteRequest, 
-    AdminStatsResponse, 
-    AdminRegisterResponse, 
+    AdminInviteRequest,
+    AdminStatsResponse,
+    AdminRegisterResponse,
     PaginatedAdminInternshipsResponse,
     PaginatedAdminUsersResponse,
 )
@@ -26,15 +26,12 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
-
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 
-
 AdminUser = Annotated[User, Depends(require_admin)]
-
 
 # Admin Self-Registration (Invite Secret)
 @router.post(
@@ -86,7 +83,6 @@ def admin_register(data: AdminInviteRequest, db: DbSession):
         email=data.email,
     )
 
-
 # Existing Routes
 @router.get("/stats", response_model=AdminStatsResponse)
 def get_stats(db: DbSession, _: AdminUser):
@@ -101,26 +97,28 @@ def get_stats(db: DbSession, _: AdminUser):
         total_applications=db.query(Application).count(),
     )
 
-
 @router.get("/users", response_model=PaginatedAdminUsersResponse)
 def list_users(
     db: DbSession,
     _: AdminUser,
     role: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
+    user_id: Optional[int] = Query(default=None),
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
     q = db.query(User)
-    if role:
-        q = q.filter(User.role == role)
-    if search:
-        q = q.filter(User.email.ilike(f"%{search}%"))
+    if user_id is not None:
+        q = q.filter(User.id == user_id)
+    else:
+        if role:
+            q = q.filter(User.role == role)
+        if search:
+            q = q.filter(User.email.ilike(f"%{search}%"))
     q = q.order_by(User.created_at.desc())
     total = q.count()
     items = q.offset(offset).limit(limit).all()
     return PaginatedAdminUsersResponse(items=items, total=total, limit=limit, offset=offset)
-
 
 @router.patch("/users/{user_id}/ban")
 def ban_user(user_id: int, db: DbSession, _: AdminUser):
@@ -134,7 +132,6 @@ def ban_user(user_id: int, db: DbSession, _: AdminUser):
     db.commit()
     return {"detail": "User banned"}
 
-
 @router.patch("/users/{user_id}/unban")
 def unban_user(user_id: int, db: DbSession, _: AdminUser):
     user = db.query(User).filter(User.id == user_id).first()
@@ -145,26 +142,40 @@ def unban_user(user_id: int, db: DbSession, _: AdminUser):
     db.commit()
     return {"detail": "User unbanned"}
 
-
 @router.get("/internships", response_model=PaginatedAdminInternshipsResponse)
 def list_all_internships(
     db: DbSession,
     _: AdminUser,
     search: Optional[str] = Query(default=None),
+    internship_id: Optional[int] = Query(default=None),
+    status: Optional[str] = Query(default=None),  # active | inactive | deleted
     include_deleted: bool = Query(default=False),
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
     q = db.query(Internship)
-    if not include_deleted:
-        q = q.filter(Internship.is_deleted.is_(False))
-    if search:
-        q = q.filter(Internship.title.ilike(f"%{search}%"))
+
+    if internship_id is not None:
+        # Search by exact ID - ignore all other filters
+        q = q.filter(Internship.id == internship_id)
+    else:
+        # Status filter takes precedence over include_deleted
+        if status == "deleted":
+            q = q.filter(Internship.is_deleted.is_(True))
+        elif status == "active":
+            q = q.filter(Internship.is_active.is_(True), Internship.is_deleted.is_(False))
+        elif status == "inactive":
+            q = q.filter(Internship.is_active.is_(False), Internship.is_deleted.is_(False))
+        elif not include_deleted:
+            q = q.filter(Internship.is_deleted.is_(False))
+
+        if search:
+            q = q.filter(Internship.title.ilike(f"%{search}%"))
+
     q = q.order_by(Internship.created_at.desc())
     total = q.count()
     items = q.offset(offset).limit(limit).all()
     return PaginatedAdminInternshipsResponse(items=items, total=total, limit=limit, offset=offset)
-
 
 @router.delete("/internships/{internship_id}")
 def delete_internship(internship_id: int, db: DbSession, _: AdminUser):
@@ -175,7 +186,6 @@ def delete_internship(internship_id: int, db: DbSession, _: AdminUser):
     internship.is_active = False
     db.commit()
     return {"detail": "Internship removed"}
-
 
 @router.patch("/internships/{internship_id}/toggle")
 def toggle_internship(internship_id: int, db: DbSession, _: AdminUser):
