@@ -18,13 +18,10 @@ APPLICANT_PROFILE_FIELDS: tuple[str, ...] = (
     "graduation_year",
     "gpa",
     "skills",
-    "headline",
     "bio",
     "languages_spoken",
     "hobbies",
-    "portfolio_url",
-    "github_url",
-    "linkedin_url",
+    "avatar_url",
 )
 
 RECRUITER_PROFILE_FIELDS: tuple[str, ...] = (
@@ -36,7 +33,7 @@ RECRUITER_PROFILE_FIELDS: tuple[str, ...] = (
     "department",
     "bio",
     "phone_number",
-    "linkedin_url",
+    "avatar_url"
 )
 
 

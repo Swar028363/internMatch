@@ -51,15 +51,11 @@ class ApplicantProfileBase(BaseModel):
     def validate_phone(cls, v: Optional[str]) -> Optional[str]:
         if not v:
             return v
-        
         cleaned = re.sub(r'[\s\-]', '', v)
-
         digits = cleaned[1:] if cleaned.startswith('+') else cleaned
-
         if not re.match(r'^\d{7,15}$', digits):
             raise ValueError('Phone must be 7–15 digits, optionally starting with +')
-
-        return cleaned 
+        return cleaned
 
     @field_validator('gpa')
     @classmethod
@@ -91,6 +87,9 @@ class ApplicantProfileUpdate(ApplicantProfileBase):
 class ApplicantProfileResponse(ApplicantProfileBase):
     id: int
     user_id: int
+
+    # Uploaded via POST /applicant/profile/avatar
+    avatar_url: Optional[str] = None
 
     profile_completed: bool
     profile_completion_percentage: int
