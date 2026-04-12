@@ -16,7 +16,7 @@ export interface Application {
   applicant_id: number
   applicant: ApplicantSummary | null
   cover_letter: string | null
-  resume_path: string | null  // storage path e.g. "user_2/internship_1/resume.pdf", NOT a URL
+  resume_path: string | null
   status: ApplicationStatus
   created_at: string
   updated_at: string | null
@@ -31,18 +31,42 @@ export interface ApplyPayload {
   cover_letter?: string
 }
 
+export interface PaginatedApplications {
+  items: ApplicationWithInternship[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface PaginatedApplicationsForInternship {
+  items: Application[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export const applicationService = {
   apply: (data: ApplyPayload) =>
     api.post<Application>('/applications', data),
 
-  getMine: () =>
-    api.get<ApplicationWithInternship[]>('/applications/mine'),
+  getMine: (params?: { limit?: number; offset?: number }) => {
+    const q = new URLSearchParams()
+    if (params?.limit !== undefined) q.set('limit', String(params.limit))
+    if (params?.offset !== undefined) q.set('offset', String(params.offset))
+    const qs = q.toString()
+    return api.get<PaginatedApplications>(`/applications/mine${qs ? `?${qs}` : ''}`)
+  },
 
   getById: (id: number) =>
     api.get<ApplicationWithInternship>(`/applications/${id}`),
 
-  getForInternship: (internshipId: number) =>
-    api.get<Application[]>(`/applications/internship/${internshipId}`),
+  getForInternship: (internshipId: number, params?: { limit?: number; offset?: number }) => {
+    const q = new URLSearchParams()
+    if (params?.limit !== undefined) q.set('limit', String(params.limit))
+    if (params?.offset !== undefined) q.set('offset', String(params.offset))
+    const qs = q.toString()
+    return api.get<PaginatedApplicationsForInternship>(`/applications/internship/${internshipId}${qs ? `?${qs}` : ''}`)
+  },
 
   updateStatus: (id: number, status: ApplicationStatus) =>
     api.patch<Application>(`/applications/${id}/status`, { status }),

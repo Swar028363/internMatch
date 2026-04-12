@@ -3,12 +3,14 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/useAuth'
 import { DefaultAvatar } from './DefaultAvatar'
 import logo from "../assets/IM.png";
+import { profileService } from '../services/profile'
 
 export default function Navbar() {
   const { isAuthenticated, user, logout } = useAuth()
   const navigate = useNavigate()
   const [showDropdown, setShowDropdown] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Close user dropdown when clicking outside
@@ -23,6 +25,30 @@ export default function Navbar() {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showDropdown])
+
+  useEffect(() => {
+    if (!user) return
+
+    const fetchAvatar = async () => {
+      try {
+        const res =
+          user.role === 'applicant'
+            ? await profileService.getApplicantProfile()
+            : await profileService.getRecruiterProfile()
+
+        setAvatarUrl(res.avatar_url ?? null)
+      } catch {
+        setAvatarUrl(null)
+      }
+    }
+
+    fetchAvatar()
+
+    const handler = () => fetchAvatar()
+    window.addEventListener('avatarUpdated', handler)
+
+    return () => window.removeEventListener('avatarUpdated', handler)
+  }, [user])
 
   // Close mobile menu on route change / resize
   useEffect(() => {
@@ -51,6 +77,7 @@ export default function Navbar() {
     { to: dashboardPath, label: 'Dashboard', always: false, requireAuth: true },
     { to: '/about', label: 'About Us', always: true },
     { to: '/contact', label: 'Contact Us', always: true },
+    { to: '/admin', label: '⚙ Admin', always: false, requireAuth: true, hide: !(user as any)?.is_admin },
   ]
 
   return (
@@ -59,7 +86,7 @@ export default function Navbar() {
 
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <img className="h-8 w-8 object-contain" src={logo} alt="Logo" />
+          <img className="h-10 w-10 object-contain" src={logo} alt="Logo" />
           <Link to="/" className="text-lg font-semibold text-gray-900">
             InternMatch
           </Link>
@@ -97,7 +124,15 @@ export default function Navbar() {
                 className="flex items-center gap-2 p-1 rounded-lg hover:bg-gray-100 transition"
                 title={user?.email}
               >
-                <DefaultAvatar size="sm" initials={getInitials()} />
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="avatar"
+                    className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                  />
+                ) : (
+                  <DefaultAvatar size="sm" initials={getInitials()} />
+              )}
               </button>
 
               {showDropdown && (

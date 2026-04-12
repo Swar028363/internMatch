@@ -12,6 +12,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import ForgotPassword from './pages/ForgotPassword'
 import NotFound from './pages/NotFound'
+import CompanyProfile from './pages/CompanyProfile'
 import { Account } from './pages/Account'
 import { StudentDashboard } from './pages/StudentDashboard'
 import { RecruiterDashboard } from './pages/RecruiterDashboard'
@@ -20,6 +21,8 @@ import { InternshipManagement } from './pages/InternshipManagement'
 import { PostInternship } from './pages/PostInternship'
 import { EditInternship } from './pages/EditInternship'
 import { ViewApplicantProfile } from './pages/ViewApplicantProfile'
+import { AdminDashboard } from './pages/AdminDashboard'
+import { AdminRegister } from './pages/AdminRegister'
 
 function App() {
   return (
@@ -32,6 +35,7 @@ function App() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/explore" element={<Explore />} />
         <Route path="/internship/:id" element={<InternshipDetails />} />
+        <Route path="/company/:id" element={<CompanyProfile />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -50,6 +54,10 @@ function App() {
         <Route path="/edit-internship/:id" element={<ProtectedRoute requiredRole="recruiter"><EditInternship /></ProtectedRoute>} />
         <Route path="/applicant-profile/:id" element={<ProtectedRoute requiredRole="recruiter"><ViewApplicantProfile /></ProtectedRoute>} />
 
+        {/* Admin */}
+        <Route path="/admin/register" element={<AdminRegister />} />
+        <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+        
         {/* 404 */}
         <Route path="*" element={<NotFound />} />
       </Routes>

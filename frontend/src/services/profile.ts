@@ -25,6 +25,7 @@ export interface ApplicantProfile {
   portfolio_url: string | null
   github_url: string | null
   linkedin_url: string | null
+  avatar_url: string | null          // profile picture
   profile_completed: boolean
   profile_completion_percentage: number
   created_at: string
@@ -33,7 +34,7 @@ export interface ApplicantProfile {
 }
 
 export type ApplicantProfileUpdate = Partial<
-  Omit<ApplicantProfile, 'id' | 'user_id' | 'profile_completed' | 'profile_completion_percentage' | 'created_at' | 'updated_at' | 'last_active_at'>
+  Omit<ApplicantProfile, 'id' | 'user_id' | 'avatar_url' | 'profile_completed' | 'profile_completion_percentage' | 'created_at' | 'updated_at' | 'last_active_at'>
 >
 
 // Recruiter profile
@@ -41,6 +42,9 @@ export interface RecruiterProfile {
   id: number
   user_id: number
   company_name: string | null
+  company_website: string | null
+  company_logo_url: string | null    // company / brand logo
+  avatar_url: string | null          // personal profile picture
   first_name: string | null
   last_name: string | null
   gender: string | null
@@ -57,13 +61,12 @@ export interface RecruiterProfile {
 }
 
 export type RecruiterProfileUpdate = Partial<
-  Omit<RecruiterProfile, 'id' | 'user_id' | 'profile_completed' | 'profile_completion_percentage' | 'created_at' | 'updated_at' | 'last_active_at'>
+  Omit<RecruiterProfile, 'id' | 'user_id' | 'avatar_url' | 'company_logo_url' | 'profile_completed' | 'profile_completion_percentage' | 'created_at' | 'updated_at' | 'last_active_at'>
 >
-
-
 
 // Service
 export const profileService = {
+  // Applicant
   getApplicantProfile: () =>
     api.get<ApplicantProfile>('/applicant/profile'),
 
@@ -73,13 +76,31 @@ export const profileService = {
   getApplicantProfileById: (userId: number) =>
     api.get<ApplicantProfile>(`/applicant/profile/${userId}`),
 
+  uploadApplicantAvatar: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.upload<ApplicantProfile>('/applicant/profile/avatar', form)
+  },
+
+  // Recruiter
   getRecruiterProfile: () =>
     api.get<RecruiterProfile>('/recruiter/profile'),
 
   updateRecruiterProfile: (data: RecruiterProfileUpdate) =>
     api.put<RecruiterProfile>('/recruiter/profile', data),
-}
 
+  uploadRecruiterAvatar: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.upload<RecruiterProfile>('/recruiter/profile/avatar', form)
+  },
+
+  uploadCompanyLogo: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.upload<RecruiterProfile>('/recruiter/profile/logo', form)
+  },
+}
 
 // User account
 export const userService = {

@@ -10,8 +10,8 @@ export interface Internship {
   job_type: string
   duration: string | null
   salary: string | null
-  stipend_amount: number | null   // numeric monthly stipend in ₹
-  deadline: string | null         // ISO date string YYYY-MM-DD
+  stipend_amount: number | null
+  deadline: string | null
   skills: string[]
   is_active: boolean
   created_at: string
@@ -72,8 +72,13 @@ export const internshipService = {
   list: (filters: InternshipFilters = {}) =>
     api.get<PaginatedInternships>(`/internships${buildQuery(filters)}`),
 
-  getMine: () =>
-    api.get<Internship[]>('/internships/mine'),
+  getMine: (params?: { limit?: number; offset?: number }) => {
+    const q = new URLSearchParams()
+    if (params?.limit !== undefined) q.set('limit', String(params.limit))
+    if (params?.offset !== undefined) q.set('offset', String(params.offset))
+    const qs = q.toString()
+    return api.get<PaginatedInternships>(`/internships/mine${qs ? `?${qs}` : ''}`)
+  },
 
   getById: (id: number) =>
     api.get<Internship>(`/internships/${id}`),

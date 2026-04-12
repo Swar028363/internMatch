@@ -14,6 +14,7 @@ export interface MeResponse {
   id: number
   email: string
   role: 'applicant' | 'recruiter'
+  is_admin?: boolean
 }
 
 export const authService = {
