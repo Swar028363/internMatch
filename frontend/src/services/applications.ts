@@ -49,8 +49,9 @@ export const applicationService = {
   apply: (data: ApplyPayload) =>
     api.post<Application>('/applications', data),
 
-  getMine: (params?: { limit?: number; offset?: number }) => {
+  getMine: (params?: { limit?: number; offset?: number; search?: string }) => {
     const q = new URLSearchParams()
+    if (params?.search) q.set('search', params.search)
     if (params?.limit !== undefined) q.set('limit', String(params.limit))
     if (params?.offset !== undefined) q.set('offset', String(params.offset))
     const qs = q.toString()
@@ -60,8 +61,9 @@ export const applicationService = {
   getById: (id: number) =>
     api.get<ApplicationWithInternship>(`/applications/${id}`),
 
-  getForInternship: (internshipId: number, params?: { limit?: number; offset?: number }) => {
+  getForInternship: (internshipId: number, params?: { limit?: number; offset?: number; search?: string }) => {
     const q = new URLSearchParams()
+    if (params?.search) q.set('search', params.search)
     if (params?.limit !== undefined) q.set('limit', String(params.limit))
     if (params?.offset !== undefined) q.set('offset', String(params.offset))
     const qs = q.toString()

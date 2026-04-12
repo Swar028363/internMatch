@@ -32,6 +32,7 @@ export function AdminDashboard() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [userIdSearch, setUserIdSearch] = useState("");
 
   // Internships tab
   const [internshipsData, setInternshipsData] =
@@ -39,6 +40,8 @@ export function AdminDashboard() {
   const [internshipsOffset, setInternshipsOffset] = useState(0);
   const [internshipsLoading, setInternshipsLoading] = useState(false);
   const [internshipSearch, setInternshipSearch] = useState("");
+  const [internshipIdSearch, setInternshipIdSearch] = useState("");
+  const [internshipStatusFilter, setInternshipStatusFilter] = useState("");
 
   const [actionLoading, setActionLoading] = useState<number | null>(null);
 
@@ -56,54 +59,76 @@ export function AdminDashboard() {
   }, []);
 
   // Users fetch
-  const fetchUsers = useCallback((offset: number, s: string, role: string) => {
-    setUsersLoading(true);
-    adminService
-      .getUsers({
-        search: s || undefined,
-        role: role || undefined,
-        limit: PAGE_SIZE,
-        offset,
-      })
-      .then(setUsersData)
-      .catch(() => toastError("Failed to load users."))
-      .finally(() => setUsersLoading(false));
-  }, []);
+  const fetchUsers = useCallback(
+    (offset: number, s: string, role: string, uid: string) => {
+      setUsersLoading(true);
+      adminService
+        .getUsers({
+          search: s || undefined,
+          role: role || undefined,
+          user_id: uid ? Number(uid) : undefined,
+          limit: PAGE_SIZE,
+          offset,
+        })
+        .then(setUsersData)
+        .catch(() => toastError("Failed to load users."))
+        .finally(() => setUsersLoading(false));
+    },
+    [],
+  );
 
   useEffect(() => {
-    if (tab === "users") fetchUsers(usersOffset, search, roleFilter);
-  }, [tab, usersOffset, search, roleFilter, fetchUsers]);
+    if (tab === "users") fetchUsers(usersOffset, search, roleFilter, userIdSearch);
+  }, [tab, usersOffset, search, roleFilter, userIdSearch, fetchUsers]);
 
   // Reset offset when search/filter changes
   useEffect(() => {
     setUsersOffset(0);
-  }, [search, roleFilter]);
+  }, [search, roleFilter, userIdSearch]);
 
   // Internships fetch
-  const fetchInternships = useCallback((offset: number, s: string) => {
-    setInternshipsLoading(true);
-    adminService
-      .getInternships({
-        search: s || undefined,
-        include_deleted: true,
-        limit: PAGE_SIZE,
-        offset,
-      })
-      .then(setInternshipsData)
-      .catch(() => toastError("Failed to load internships."))
-      .finally(() => setInternshipsLoading(false));
-  }, []);
+  const fetchInternships = useCallback(
+    (offset: number, s: string, iid: string, statusF: string) => {
+      setInternshipsLoading(true);
+      adminService
+        .getInternships({
+          search: s || undefined,
+          internship_id: iid ? Number(iid) : undefined,
+          status: statusF || undefined,
+          // When no status filter, show all (include deleted)
+          include_deleted: !statusF,
+          limit: PAGE_SIZE,
+          offset,
+        })
+        .then(setInternshipsData)
+        .catch(() => toastError("Failed to load internships."))
+        .finally(() => setInternshipsLoading(false));
+    },
+    [],
+  );
 
   useEffect(() => {
     if (tab === "internships")
-      fetchInternships(internshipsOffset, internshipSearch);
-  }, [tab, internshipsOffset, internshipSearch, fetchInternships]);
+      fetchInternships(
+        internshipsOffset,
+        internshipSearch,
+        internshipIdSearch,
+        internshipStatusFilter,
+      );
+  }, [
+    tab,
+    internshipsOffset,
+    internshipSearch,
+    internshipIdSearch,
+    internshipStatusFilter,
+    fetchInternships,
+  ]);
 
   useEffect(() => {
     setInternshipsOffset(0);
-  }, [internshipSearch]);
+  }, [internshipSearch, internshipIdSearch, internshipStatusFilter]);
 
-  // Actions 
+  // Actions
   const handleBanToggle = async (u: AdminUser) => {
     const action = u.is_deleted ? "unban" : "ban";
     const ok = await confirm(`Are you sure you want to ${action} ${u.email}?`);
@@ -112,7 +137,7 @@ export function AdminDashboard() {
     try {
       if (u.is_deleted) await adminService.unbanUser(u.id);
       else await adminService.banUser(u.id);
-      fetchUsers(usersOffset, search, roleFilter);
+      fetchUsers(usersOffset, search, roleFilter, userIdSearch);
       success(`User ${action}ned.`);
     } catch (err) {
       toastError(
@@ -129,7 +154,12 @@ export function AdminDashboard() {
     setActionLoading(i.id);
     try {
       await adminService.deleteInternship(i.id);
-      fetchInternships(internshipsOffset, internshipSearch);
+      fetchInternships(
+        internshipsOffset,
+        internshipSearch,
+        internshipIdSearch,
+        internshipStatusFilter,
+      );
       success("Internship removed.");
     } catch (err) {
       toastError(err instanceof ApiError ? err.message : "Failed to remove.");
@@ -142,7 +172,12 @@ export function AdminDashboard() {
     setActionLoading(i.id);
     try {
       const res = await adminService.toggleInternship(i.id);
-      fetchInternships(internshipsOffset, internshipSearch);
+      fetchInternships(
+        internshipsOffset,
+        internshipSearch,
+        internshipIdSearch,
+        internshipStatusFilter,
+      );
       success(res.detail);
     } catch (err) {
       toastError(err instanceof ApiError ? err.message : "Failed to toggle.");
@@ -153,36 +188,12 @@ export function AdminDashboard() {
 
   const statCards = stats
     ? [
-        {
-          label: "Total Users",
-          value: stats.total_users,
-          color: "text-gray-900",
-        },
-        {
-          label: "Applicants",
-          value: stats.total_applicants,
-          color: "text-blue-600",
-        },
-        {
-          label: "Recruiters",
-          value: stats.total_recruiters,
-          color: "text-purple-600",
-        },
-        {
-          label: "Internships",
-          value: stats.total_internships,
-          color: "text-indigo-600",
-        },
-        {
-          label: "Active Listings",
-          value: stats.active_internships,
-          color: "text-green-600",
-        },
-        {
-          label: "Total Applications",
-          value: stats.total_applications,
-          color: "text-orange-600",
-        },
+        { label: "Total Users", value: stats.total_users, color: "text-gray-900" },
+        { label: "Applicants", value: stats.total_applicants, color: "text-blue-600" },
+        { label: "Recruiters", value: stats.total_recruiters, color: "text-purple-600" },
+        { label: "Internships", value: stats.total_internships, color: "text-indigo-600" },
+        { label: "Active Listings", value: stats.active_internships, color: "text-green-600" },
+        { label: "Total Applications", value: stats.total_applications, color: "text-orange-600" },
       ]
     : [];
 
@@ -192,12 +203,8 @@ export function AdminDashboard() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              Admin Dashboard
-            </h1>
-            <p className="text-gray-500 mt-1">
-              Moderation and platform overview
-            </p>
+            <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="text-gray-500 mt-1">Moderation and platform overview</p>
           </div>
           <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full uppercase tracking-wide">
             Admin
@@ -213,7 +220,10 @@ export function AdminDashboard() {
                 setTab(t);
                 setSearch("");
                 setRoleFilter("");
+                setUserIdSearch("");
                 setInternshipSearch("");
+                setInternshipIdSearch("");
+                setInternshipStatusFilter("");
               }}
               className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition capitalize ${
                 tab === t
@@ -231,10 +241,7 @@ export function AdminDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
             {statsLoading
               ? Array.from({ length: 6 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="bg-white rounded-xl shadow p-6 animate-pulse"
-                  >
+                  <div key={i} className="bg-white rounded-xl shadow p-6 animate-pulse">
                     <div className="h-4 bg-gray-200 rounded w-1/2 mb-3" />
                     <div className="h-9 bg-gray-200 rounded w-1/3" />
                   </div>
@@ -242,9 +249,7 @@ export function AdminDashboard() {
               : statCards.map(({ label, value, color }) => (
                   <div key={label} className="bg-white rounded-xl shadow p-6">
                     <p className="text-sm text-gray-500 font-medium">{label}</p>
-                    <p className={`text-4xl font-bold mt-2 ${color}`}>
-                      {value}
-                    </p>
+                    <p className={`text-4xl font-bold mt-2 ${color}`}>{value}</p>
                   </div>
                 ))}
           </div>
@@ -253,13 +258,26 @@ export function AdminDashboard() {
         {/* Users */}
         {tab === "users" && (
           <>
-            <div className="flex gap-3 mb-6">
+            <div className="flex gap-3 mb-6 flex-wrap">
               <input
                 type="text"
                 placeholder="Search by email…"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  if (e.target.value) setUserIdSearch("");
+                }}
+                className="flex-1 min-w-[160px] border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="number"
+                placeholder="Search by ID…"
+                value={userIdSearch}
+                onChange={(e) => {
+                  setUserIdSearch(e.target.value);
+                  if (e.target.value) setSearch("");
+                }}
+                className="w-36 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <select
                 value={roleFilter}
@@ -281,41 +299,25 @@ export function AdminDashboard() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                        ID
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                        Email
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                        Role
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                        Status
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                        Joined
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                        Action
-                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Role</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Joined</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {(usersData?.items ?? []).map((u) => (
                       <tr
                         key={u.id}
-                        className={
-                          u.is_deleted ? "bg-red-50" : "hover:bg-gray-50"
-                        }
+                        className={u.is_deleted ? "bg-red-50" : "hover:bg-gray-50"}
                       >
                         <td className="px-4 py-3 text-gray-400">{u.id}</td>
                         <td className="px-4 py-3 font-medium text-gray-900">
                           {u.email}
                           {u.is_admin && (
-                            <span className="ml-2 text-xs text-red-600 font-bold">
-                              [admin]
-                            </span>
+                            <span className="ml-2 text-xs text-red-600 font-bold">[admin]</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -356,11 +358,7 @@ export function AdminDashboard() {
                                   : "bg-red-100 text-red-700 hover:bg-red-200"
                               } disabled:opacity-50`}
                             >
-                              {actionLoading === u.id
-                                ? "…"
-                                : u.is_deleted
-                                  ? "Unban"
-                                  : "Ban"}
+                              {actionLoading === u.id ? "…" : u.is_deleted ? "Unban" : "Ban"}
                             </button>
                           )}
                         </td>
@@ -368,10 +366,7 @@ export function AdminDashboard() {
                     ))}
                     {(!usersData || usersData.items.length === 0) && (
                       <tr>
-                        <td
-                          colSpan={6}
-                          className="px-4 py-10 text-center text-gray-400"
-                        >
+                        <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
                           No users found.
                         </td>
                       </tr>
@@ -397,14 +392,37 @@ export function AdminDashboard() {
         {/* Internships */}
         {tab === "internships" && (
           <>
-            <div className="mb-6">
+            <div className="flex gap-3 mb-6 flex-wrap">
               <input
                 type="text"
                 placeholder="Search by title…"
                 value={internshipSearch}
-                onChange={(e) => setInternshipSearch(e.target.value)}
-                className="w-full sm:w-80 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => {
+                  setInternshipSearch(e.target.value);
+                  if (e.target.value) setInternshipIdSearch("");
+                }}
+                className="flex-1 min-w-[160px] border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              <input
+                type="number"
+                placeholder="Search by ID…"
+                value={internshipIdSearch}
+                onChange={(e) => {
+                  setInternshipIdSearch(e.target.value);
+                  if (e.target.value) setInternshipSearch("");
+                }}
+                className="w-36 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <select
+                value={internshipStatusFilter}
+                onChange={(e) => setInternshipStatusFilter(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="deleted">Deleted</option>
+              </select>
             </div>
 
             <div className="bg-white rounded-xl shadow overflow-hidden">
@@ -417,24 +435,12 @@ export function AdminDashboard() {
                   <table className="w-full text-sm min-w-[500px]">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                          ID
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                          Title
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                          Location
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                          Status
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                          Posted
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                          Actions
-                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Title</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Location</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Posted</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -442,18 +448,14 @@ export function AdminDashboard() {
                         <tr
                           key={i.id}
                           className={
-                            i.is_deleted
-                              ? "bg-red-50 opacity-60"
-                              : "hover:bg-gray-50"
+                            i.is_deleted ? "bg-red-50 opacity-60" : "hover:bg-gray-50"
                           }
                         >
                           <td className="px-4 py-3 text-gray-400">{i.id}</td>
                           <td className="px-4 py-3 font-medium text-gray-900 max-w-xs truncate">
                             {i.title}
                           </td>
-                          <td className="px-4 py-3 text-gray-500">
-                            {i.location}
-                          </td>
+                          <td className="px-4 py-3 text-gray-500">{i.location}</td>
                           <td className="px-4 py-3">
                             <span
                               className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -464,11 +466,7 @@ export function AdminDashboard() {
                                     : "bg-gray-100 text-gray-600"
                               }`}
                             >
-                              {i.is_deleted
-                                ? "Deleted"
-                                : i.is_active
-                                  ? "Active"
-                                  : "Inactive"}
+                              {i.is_deleted ? "Deleted" : i.is_active ? "Active" : "Inactive"}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-gray-500">
@@ -500,13 +498,9 @@ export function AdminDashboard() {
                           </td>
                         </tr>
                       ))}
-                      {(!internshipsData ||
-                        internshipsData.items.length === 0) && (
+                      {(!internshipsData || internshipsData.items.length === 0) && (
                         <tr>
-                          <td
-                            colSpan={6}
-                            className="px-4 py-10 text-center text-gray-400"
-                          >
+                          <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
                             No internships found.
                           </td>
                         </tr>

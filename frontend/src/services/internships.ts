@@ -72,8 +72,9 @@ export const internshipService = {
   list: (filters: InternshipFilters = {}) =>
     api.get<PaginatedInternships>(`/internships${buildQuery(filters)}`),
 
-  getMine: (params?: { limit?: number; offset?: number }) => {
+  getMine: (params?: { limit?: number; offset?: number; search?: string }) => {
     const q = new URLSearchParams()
+    if (params?.search) q.set('search', params.search)
     if (params?.limit !== undefined) q.set('limit', String(params.limit))
     if (params?.offset !== undefined) q.set('offset', String(params.offset))
     const qs = q.toString()

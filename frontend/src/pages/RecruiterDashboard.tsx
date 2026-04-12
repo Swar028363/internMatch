@@ -34,22 +34,35 @@ export function RecruiterDashboard() {
   const [error, setError] = useState('')
   const { success, error: toastError, confirm } = useToast()
 
-  const fetchInternships = useCallback((off: number) => {
+  // Search
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
+
+  // Debounce search input
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput)
+      setOffset(0)
+    }, 400)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  const fetchInternships = useCallback((off: number, s: string) => {
     setLoading(true)
-    internshipService.getMine({ limit: PAGE_SIZE, offset: off })
+    internshipService.getMine({ limit: PAGE_SIZE, offset: off, search: s || undefined })
       .then(setData)
       .catch(() => setError('Failed to load internships.'))
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { fetchInternships(offset) }, [offset, fetchInternships])
+  useEffect(() => { fetchInternships(offset, search) }, [offset, search, fetchInternships])
 
   const handleDelete = async (id: number) => {
     const ok = await confirm('Delete this internship posting? This cannot be undone.')
     if (!ok) return
     try {
       await internshipService.delete(id)
-      fetchInternships(offset)
+      fetchInternships(offset, search)
       success('Internship deleted.')
     } catch (err) {
       toastError(err instanceof ApiError ? err.message : 'Failed to delete.')
@@ -103,7 +116,16 @@ export function RecruiterDashboard() {
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">My Internship Postings</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">My Internship Postings</h2>
+            <input
+              type="text"
+              placeholder="Search by title…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full sm:w-72 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
 
           {loading ? (
             <div className="space-y-4">
@@ -111,13 +133,19 @@ export function RecruiterDashboard() {
             </div>
           ) : !data || data.items.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-gray-600 mb-4">You haven't posted any internships yet.</p>
-              <Link
-                to="/post-internship"
-                className="inline-block px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-              >
-                Post Your First Internship
-              </Link>
+              {search ? (
+                <p className="text-gray-600">No internships found for "{search}".</p>
+              ) : (
+                <>
+                  <p className="text-gray-600 mb-4">You haven't posted any internships yet.</p>
+                  <Link
+                    to="/post-internship"
+                    className="inline-block px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                  >
+                    Post Your First Internship
+                  </Link>
+                </>
+              )}
             </div>
           ) : (
             <>

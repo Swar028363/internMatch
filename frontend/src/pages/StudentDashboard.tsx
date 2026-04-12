@@ -36,48 +36,64 @@ export function StudentDashboard() {
   const [appData, setAppData] = useState<PaginatedApplications | null>(null)
   const [appOffset, setAppOffset] = useState(0)
   const [appLoading, setAppLoading] = useState(true)
+  const [appSearchInput, setAppSearchInput] = useState('')
+  const [appSearch, setAppSearch] = useState('')
 
   // Saved tab state
   const [savedData, setSavedData] = useState<PaginatedSaved | null>(null)
   const [savedOffset, setSavedOffset] = useState(0)
   const [savedLoading, setSavedLoading] = useState(true)
+  const [savedSearchInput, setSavedSearchInput] = useState('')
+  const [savedSearch, setSavedSearch] = useState('')
 
   const [activeTab, setActiveTab] = useState<'applications' | 'saved'>('applications')
   const [error, setError] = useState('')
   const { success, error: toastError, confirm } = useToast()
 
-  // Fetch applications────────────
-  const fetchApplications = useCallback((offset: number) => {
+  // Debounce app search
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setAppSearch(appSearchInput)
+      setAppOffset(0)
+    }, 400)
+    return () => clearTimeout(t)
+  }, [appSearchInput])
+
+  // Debounce saved search
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSavedSearch(savedSearchInput)
+      setSavedOffset(0)
+    }, 400)
+    return () => clearTimeout(t)
+  }, [savedSearchInput])
+
+  // Fetch applications
+  const fetchApplications = useCallback((offset: number, s: string) => {
     setAppLoading(true)
-    applicationService.getMine({ limit: PAGE_SIZE, offset })
+    applicationService.getMine({ limit: PAGE_SIZE, offset, search: s || undefined })
       .then(setAppData)
       .catch(() => setError('Failed to load applications.'))
       .finally(() => setAppLoading(false))
   }, [])
 
-  useEffect(() => { fetchApplications(appOffset) }, [appOffset, fetchApplications])
+  useEffect(() => { fetchApplications(appOffset, appSearch) }, [appOffset, appSearch, fetchApplications])
 
-  // Fetch saved─
-  const fetchSaved = useCallback((offset: number) => {
+  // Fetch saved
+  const fetchSaved = useCallback((offset: number, s: string) => {
     setSavedLoading(true)
-    savedService.getAll({ limit: PAGE_SIZE, offset })
+    savedService.getAll({ limit: PAGE_SIZE, offset, search: s || undefined })
       .then(setSavedData)
       .catch(() => {})
       .finally(() => setSavedLoading(false))
   }, [])
 
-  useEffect(() => { fetchSaved(savedOffset) }, [savedOffset, fetchSaved])
+  useEffect(() => { fetchSaved(savedOffset, savedSearch) }, [savedOffset, savedSearch, fetchSaved])
 
-  // Stats from first-page data (total counts from API) 
-  // We need total counts for stats — fetch all for stats only if needed.
-  // Since API now returns totals, we use appData.total for display.
-  // For accepted/rejected/pending breakdown we still need all items, so
-  // we store them separately. To keep it simple, stats show totals from
-  // a separate lightweight fetch on mount only.
+  // Stats from first-page data (total counts from API)
   const [statCounts, setStatCounts] = useState({ accepted: 0, rejected: 0, pending: 0 })
 
   useEffect(() => {
-    // Fetch a large page just for stats on mount
     applicationService.getMine({ limit: 500, offset: 0 })
       .then((data) => {
         setStatCounts({
@@ -94,7 +110,7 @@ export function StudentDashboard() {
     if (!ok) return
     try {
       await applicationService.updateStatus(appId, 'withdrawn')
-      fetchApplications(appOffset)
+      fetchApplications(appOffset, appSearch)
       success('Application withdrawn.')
     } catch (err) {
       toastError(err instanceof ApiError ? err.message : 'Failed to withdraw.')
@@ -104,7 +120,7 @@ export function StudentDashboard() {
   const handleUnsave = async (internshipId: number) => {
     try {
       await savedService.unsave(internshipId)
-      fetchSaved(savedOffset)
+      fetchSaved(savedOffset, savedSearch)
       success('Removed from saved.')
     } catch (err) {
       toastError(err instanceof ApiError ? err.message : 'Failed to remove.')
@@ -180,19 +196,36 @@ export function StudentDashboard() {
           {/* Applications tab */}
           {activeTab === 'applications' && (
             <>
+              {/* Search bar */}
+              <div className="mb-5">
+                <input
+                  type="text"
+                  placeholder="Search by internship title…"
+                  value={appSearchInput}
+                  onChange={(e) => setAppSearchInput(e.target.value)}
+                  className="w-full sm:w-72 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
               {appLoading ? (
                 <div className="space-y-4">
                   {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
               ) : !appData || appData.items.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-gray-600 mb-4">You haven't applied to any internships yet.</p>
-                  <Link
-                    to="/explore"
-                    className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                  >
-                    Explore Internships
-                  </Link>
+                  {appSearch ? (
+                    <p className="text-gray-600">No applications found for "{appSearch}".</p>
+                  ) : (
+                    <>
+                      <p className="text-gray-600 mb-4">You haven't applied to any internships yet.</p>
+                      <Link
+                        to="/explore"
+                        className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                      >
+                        Explore Internships
+                      </Link>
+                    </>
+                  )}
                 </div>
               ) : (
                 <>
@@ -207,22 +240,22 @@ export function StudentDashboard() {
                               <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColor(app.status)}`}>
                                 {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
                               </span>
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-gray-400">
                                 Applied {new Date(app.created_at).toLocaleDateString()}
                               </span>
                             </div>
                           </div>
-                          <div className="ml-4 flex gap-2">
+                          <div className="ml-4 flex flex-col gap-2">
                             <Link
                               to={`/application/${app.id}`}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm text-center"
                             >
                               View
                             </Link>
                             {app.status === 'applied' && (
                               <button
                                 onClick={() => handleWithdraw(app.id)}
-                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+                                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm"
                               >
                                 Withdraw
                               </button>
@@ -247,49 +280,63 @@ export function StudentDashboard() {
           {/* Saved tab */}
           {activeTab === 'saved' && (
             <>
+              {/* Search bar */}
+              <div className="mb-5">
+                <input
+                  type="text"
+                  placeholder="Search saved internships…"
+                  value={savedSearchInput}
+                  onChange={(e) => setSavedSearchInput(e.target.value)}
+                  className="w-full sm:w-72 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
               {savedLoading ? (
                 <div className="space-y-4">
                   {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
               ) : !savedData || savedData.items.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-gray-500 text-4xl mb-4">☆</p>
-                  <p className="text-gray-600 mb-4">No saved internships yet. Bookmark ones you like!</p>
-                  <Link
-                    to="/explore"
-                    className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                  >
-                    Explore Internships
-                  </Link>
+                  {savedSearch ? (
+                    <p className="text-gray-600">No saved internships found for "{savedSearch}".</p>
+                  ) : (
+                    <>
+                      <p className="text-gray-600 mb-4">You haven't saved any internships yet.</p>
+                      <Link
+                        to="/explore"
+                        className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                      >
+                        Explore Internships
+                      </Link>
+                    </>
+                  )}
                 </div>
               ) : (
                 <>
                   <div className="space-y-4">
-                    {savedData.items.map((s) => (
-                      <div key={s.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition">
+                    {savedData.items.map((saved) => (
+                      <div key={saved.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-gray-900">{s.internship.title}</h3>
-                            <p className="text-sm text-gray-500 mt-1">{s.internship.location} · {s.internship.job_type}</p>
-                            {s.internship.stipend_amount && (
-                              <p className="text-sm text-green-700 font-medium mt-1">
-                                ₹{Number(s.internship.stipend_amount).toLocaleString('en-IN')}/mo
-                              </p>
-                            )}
+                            <h3 className="text-lg font-semibold text-gray-900">{saved.internship.title}</h3>
+                            <p className="text-sm text-gray-500 mt-1">
+                              {saved.internship.location}
+                              {saved.internship.duration ? ` · ${saved.internship.duration}` : ''}
+                            </p>
                             <p className="text-xs text-gray-400 mt-2">
-                              Saved {new Date(s.created_at).toLocaleDateString()}
+                              Saved {new Date(saved.created_at).toLocaleDateString()}
                             </p>
                           </div>
-                          <div className="ml-4 flex gap-2">
+                          <div className="ml-4 flex flex-col gap-2">
                             <Link
-                              to={`/internship/${s.internship_id}`}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                              to={`/internship/${saved.internship_id}`}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm text-center"
                             >
                               View
                             </Link>
                             <button
-                              onClick={() => handleUnsave(s.internship_id)}
-                              className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition text-sm"
+                              onClick={() => handleUnsave(saved.internship_id)}
+                              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm"
                             >
                               Remove
                             </button>

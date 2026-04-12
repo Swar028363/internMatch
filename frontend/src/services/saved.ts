@@ -17,8 +17,9 @@ export interface PaginatedSaved {
 }
 
 export const savedService = {
-  getAll: (params?: { limit?: number; offset?: number }) => {
+  getAll: (params?: { limit?: number; offset?: number; search?: string }) => {
     const q = new URLSearchParams()
+    if (params?.search) q.set('search', params.search)
     if (params?.limit !== undefined) q.set('limit', String(params.limit))
     if (params?.offset !== undefined) q.set('offset', String(params.offset))
     const qs = q.toString()

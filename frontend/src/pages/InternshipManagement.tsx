@@ -50,8 +50,21 @@ export function InternshipManagement() {
   const [appsLoading, setAppsLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Search
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+
   // Chat state
   const [chatApp, setChatApp] = useState<Application | null>(null);
+
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput);
+      setOffset(0);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   // Load internship once
   useEffect(() => {
@@ -63,13 +76,13 @@ export function InternshipManagement() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  // Load applications (paginated)
+  // Load applications (paginated + search)
   const fetchApps = useCallback(
-    (off: number) => {
+    (off: number, s: string) => {
       if (!id) return;
       setAppsLoading(true);
       applicationService
-        .getForInternship(Number(id), { limit: PAGE_SIZE, offset: off })
+        .getForInternship(Number(id), { limit: PAGE_SIZE, offset: off, search: s || undefined })
         .then(setAppData)
         .catch(() => setError("Failed to load applications."))
         .finally(() => setAppsLoading(false));
@@ -78,8 +91,8 @@ export function InternshipManagement() {
   );
 
   useEffect(() => {
-    fetchApps(offset);
-  }, [offset, fetchApps]);
+    fetchApps(offset, search);
+  }, [offset, search, fetchApps]);
 
   const handleStatus = async (
     appId: number,
@@ -87,7 +100,7 @@ export function InternshipManagement() {
   ) => {
     try {
       await applicationService.updateStatus(appId, newStatus);
-      fetchApps(offset);
+      fetchApps(offset, search);
       success(`Application ${newStatus}.`);
     } catch (err) {
       toastError(
@@ -173,7 +186,16 @@ export function InternshipManagement() {
         {/* Applications table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-5 sm:px-6 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">Applications</h2>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <h2 className="font-semibold text-gray-900">Applications</h2>
+              <input
+                type="text"
+                placeholder="Search by name or email…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="w-full sm:w-64 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
 
           {appsLoading ? (
@@ -183,10 +205,9 @@ export function InternshipManagement() {
           ) : apps.length === 0 ? (
             <div className="py-16 text-center text-gray-400">
               <p className="text-4xl mb-3">📭</p>
-              <p>No applications yet.</p>
+              <p>{search ? `No applicants found for "${search}".` : "No applications yet."}</p>
             </div>
           ) : (
-            /* Mobile: card layout  Desktop: table */
             <>
               {/* Mobile card layout (hidden on sm+) */}
               <div className="divide-y divide-gray-100 sm:hidden">
@@ -198,24 +219,17 @@ export function InternshipManagement() {
                           {getApplicantName(app)}
                         </p>
                         {app.applicant?.email && (
-                          <p className="text-xs text-gray-400">
+                          <p className="text-xs text-gray-400 mt-0.5">
                             {app.applicant.email}
                           </p>
                         )}
                       </div>
                       <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusColor(app.status)}`}
+                        className={`px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${statusColor(app.status)}`}
                       >
-                        {app.status.charAt(0).toUpperCase() +
-                          app.status.slice(1)}
+                        {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
                       </span>
                     </div>
-
-                    <p className="text-xs text-gray-400">
-                      Applied {new Date(app.created_at).toLocaleDateString()}
-                    </p>
-
-                    {/* Actions row */}
                     <div className="flex flex-wrap gap-2">
                       <Link
                         to={`/applicant-profile/${app.applicant_id}`}
