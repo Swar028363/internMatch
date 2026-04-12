@@ -29,6 +29,7 @@ def get_me(current_user: CurrentUser) -> dict:
         "id": current_user.id,
         "email": current_user.email,
         "role": current_user.role,
+        "is_admin": current_user.is_admin,
     }
 
 

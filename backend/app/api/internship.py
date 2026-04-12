@@ -1,12 +1,11 @@
 from datetime import date
 from decimal import Decimal
-from typing import Annotated, List, Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy import Text, cast
-from sqlalchemy.dialects.postgresql import JSONB
 
 from app.database.session import get_db
 from app.deps import get_current_user
@@ -54,7 +53,6 @@ def list_internships(
     if job_type:
         query = query.filter(Internship.job_type.ilike(f"%{job_type}%"))
     if search:
-        # PostgreSQL full-text-style ilike on title + description
         query = query.filter(
             Internship.title.ilike(f"%{search}%")
             | Internship.description.ilike(f"%{search}%")
@@ -65,8 +63,6 @@ def list_internships(
         query = query.filter(Internship.stipend_amount <= stipend_max)
 
     if skill:
-        import json
-        skill_json = json.dumps([skill])
         query = query.filter(
             cast(Internship.skills, Text).ilike(f"%{skill.strip()}%")
         )
@@ -89,29 +85,36 @@ def _apply_sort(query, sort_by: Optional[str]):
         return query.order_by(Internship.stipend_amount.asc().nullslast())
     if sort_by == "duration_asc":
         return query.order_by(Internship.duration.asc().nullslast())
-    
     return query.order_by(Internship.created_at.desc())
 
 
-# Recruiter: list MY postings
+# Recruiter: list MY postings (paginated)
 @router.get(
     "/mine",
-    response_model=List[InternshipResponse],
+    response_model=PaginatedInternshipResponse,
     summary="Get internships posted by the current recruiter",
 )
-def get_my_internships(db: DbSession, current_user: CurrentUser):
+def get_my_internships(
+    db: DbSession,
+    current_user: CurrentUser,
+    limit: int = Query(default=10, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
     if current_user.role != Role.recruiter:
         raise HTTPException(status_code=403, detail="Only recruiters can access this")
 
-    return (
+    q = (
         db.query(Internship)
         .filter(
             Internship.posted_by == current_user.id,
             Internship.is_deleted.is_(False),
         )
         .order_by(Internship.created_at.desc())
-        .all()
     )
+    total = q.count()
+    items = q.offset(offset).limit(limit).all()
+
+    return PaginatedInternshipResponse(items=items, total=total, limit=limit, offset=offset)
 
 
 # Public: single internship

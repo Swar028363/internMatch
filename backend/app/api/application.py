@@ -1,9 +1,8 @@
-import uuid
-from pathlib import Path
 from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session, joinedload
+from pydantic import BaseModel
 
 from app.core.config import MAX_UPLOAD_BYTES
 from app.core.supabase_client import get_supabase_client
@@ -21,11 +20,33 @@ from app.schemas.application import (
     ApplicantSummary,
 )
 from app.utils.file_validation import is_valid_resume
+from app.utils.email import send_status_change_email
+from app.models.recruiter_profile import RecruiterProfile
 
 router = APIRouter(prefix="/applications", tags=["Applications"])
 
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+class PaginatedApplicationsResponse(BaseModel):
+    items: List[ApplicationWithInternship]
+    total: int
+    limit: int
+    offset: int
+
+    class Config:
+        from_attributes = True
+
+
+class PaginatedApplicationResponse(BaseModel):
+    items: List[ApplicationResponse]
+    total: int
+    limit: int
+    offset: int
+
+    class Config:
+        from_attributes = True
 
 
 def _enrich_with_applicant(application: Application, db: Session) -> ApplicationResponse:
@@ -77,22 +98,36 @@ def create_application(data: ApplicationCreate, db: DbSession, current_user: Cur
     return application
 
 
-@router.get("/mine", response_model=List[ApplicationWithInternship])
-def get_my_applications(db: DbSession, current_user: CurrentUser):
+@router.get("/mine", response_model=PaginatedApplicationsResponse)
+def get_my_applications(
+    db: DbSession,
+    current_user: CurrentUser,
+    limit: int = Query(default=10, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
     if current_user.role != Role.applicant:
         raise HTTPException(status_code=403, detail="Only applicants can access this")
 
-    return (
+    q = (
         db.query(Application)
         .options(joinedload(Application.internship))
         .filter(Application.applicant_id == current_user.id)
         .order_by(Application.created_at.desc())
-        .all()
     )
+    total = q.count()
+    items = q.offset(offset).limit(limit).all()
+
+    return PaginatedApplicationsResponse(items=items, total=total, limit=limit, offset=offset)
 
 
-@router.get("/internship/{internship_id}", response_model=List[ApplicationResponse])
-def get_applications_for_internship(internship_id: int, db: DbSession, current_user: CurrentUser):
+@router.get("/internship/{internship_id}", response_model=PaginatedApplicationResponse)
+def get_applications_for_internship(
+    internship_id: int,
+    db: DbSession,
+    current_user: CurrentUser,
+    limit: int = Query(default=10, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
     if current_user.role != Role.recruiter:
         raise HTTPException(status_code=403, detail="Only recruiters can access this")
 
@@ -104,15 +139,21 @@ def get_applications_for_internship(internship_id: int, db: DbSession, current_u
     if not internship:
         raise HTTPException(status_code=404, detail="Internship not found")
 
-    applications = (
+    q = (
         db.query(Application)
         .options(joinedload(Application.applicant))
         .filter(Application.internship_id == internship_id)
         .order_by(Application.created_at.desc())
-        .all()
     )
+    total = q.count()
+    applications = q.offset(offset).limit(limit).all()
 
-    return [_enrich_with_applicant(app, db) for app in applications]
+    return PaginatedApplicationResponse(
+        items=[_enrich_with_applicant(app, db) for app in applications],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{application_id}", response_model=ApplicationWithInternship)
@@ -161,6 +202,29 @@ def update_status(
             raise HTTPException(status_code=403, detail="Access denied")
 
     application.status = data.status
+
+    if data.status in (ApplicationStatus.accepted, ApplicationStatus.rejected):
+        try:
+            applicant_profile = db.query(ApplicantProfile).filter(
+                ApplicantProfile.user_id == application.applicant_id
+            ).first()
+            recruiter_profile = db.query(RecruiterProfile).filter(
+                RecruiterProfile.user_id == current_user.id
+            ).first()
+            applicant_name = (
+                f"{applicant_profile.first_name or ''} {applicant_profile.last_name or ''}".strip()
+                or application.applicant.email
+            ) if applicant_profile else application.applicant.email
+            company_name = recruiter_profile.company_name if recruiter_profile else "The recruiter"
+            send_status_change_email(
+                to_email=application.applicant.email,
+                applicant_name=applicant_name,
+                internship_title=application.internship.title,
+                company_name=company_name,
+                new_status=data.status.value,
+            )
+        except Exception:
+            pass
 
     if data.status == ApplicationStatus.withdrawn:
         db.delete(application)
@@ -212,16 +276,12 @@ def upload_resume(
 
     try:
         supabase = get_supabase_client()
-
-        # Upload and get back the storage path e.g. "user_2/internship_1/resume.pdf"
         storage_path = supabase.upload_resume(
             user_id=current_user.id,
-            internship_id=application.internship_id,  # use internship_id, not app_id
+            internship_id=application.internship_id,
             file_content=content,
             filename=file.filename or "resume.pdf",
         )
-
-        # Store the full public URL so the frontend can use it directly
         public_url = supabase.get_public_url(storage_path)
         application.resume_path = public_url
 
