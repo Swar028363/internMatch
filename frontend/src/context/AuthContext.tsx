@@ -5,6 +5,7 @@ export interface User {
   id: number
   email: string
   role: 'applicant' | 'recruiter'
+  is_admin?: boolean
 }
 
 interface AuthContextType {
@@ -34,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setToken(storedToken)
     authService.getMe()
-      .then((me) => setUser({ id: me.id, email: me.email, role: me.role }))
+      .then((me) => setUser({ id: me.id, email: me.email, role: me.role, is_admin: me.is_admin }))
       .catch(() => {
         localStorage.removeItem('authToken')
         setToken(null)
@@ -61,14 +62,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { access_token } = await authService.verifyOtp({ email, otp })
     localStorage.setItem('authToken', access_token)
     const me = await authService.getMe()
-    _storeSession(access_token, { id: me.id, email: me.email, role: me.role })
+    _storeSession(access_token, { id: me.id, email: me.email, role: me.role, is_admin: me.is_admin })
   }
 
   const login = async (email: string, password: string) => {
     const { access_token } = await authService.login({ email, password })
     localStorage.setItem('authToken', access_token)
     const me = await authService.getMe()
-    _storeSession(access_token, { id: me.id, email: me.email, role: me.role })
+    _storeSession(access_token, { id: me.id, email: me.email, role: me.role, is_admin: me.is_admin })
   }
 
   const logout = () => {
