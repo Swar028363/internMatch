@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { applicationService } from '../services/applications'
 import type { ApplicationWithInternship } from '../services/applications'
+import { ChatModal } from '../components/ChatModal'
 
 const handleDownloadResume = async (url: string) => {
   try {
@@ -26,6 +27,7 @@ export function ApplicationDetails() {
   const [application, setApplication] = useState<ApplicationWithInternship | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showChat, setShowChat] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -64,15 +66,23 @@ export function ApplicationDetails() {
           ← Back
         </button>
         <div className="bg-white rounded-lg shadow-md p-8 space-y-6">
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{internship.title}</h1>
               <p className="text-gray-600 mt-1">{internship.location}</p>
               {internship.salary && <p className="text-sm text-gray-500">{internship.salary}</p>}
             </div>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColor(application.status)}`}>
-              {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
-            </span>
+            <div className="flex flex-col sm:items-end gap-2">
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColor(application.status)}`}>
+                {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
+              </span>
+              <button
+                onClick={() => setShowChat(true)}
+                className="px-3 py-1.5 border border-blue-300 text-blue-600 rounded-lg text-sm hover:bg-blue-50 transition"
+              >
+                💬 Chat with Recruiter
+              </button>
+            </div>
           </div>
           <div className="border-t border-gray-200 pt-6 space-y-4">
             <div>
@@ -121,6 +131,13 @@ export function ApplicationDetails() {
           </div>
         </div>
       </div>
+      {showChat && (
+        <ChatModal
+          applicationId={application.id}
+          otherPartyEmail={internship.title + ' — Recruiter'}
+          onClose={() => setShowChat(false)}
+        />
+      )}
     </div>
   )
 }

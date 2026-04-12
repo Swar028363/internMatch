@@ -1,9 +1,10 @@
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/useAuth'
 import { internshipService } from '../services/internships'
 import type { Internship } from '../services/internships'
 import { applicationService } from '../services/applications'
+import { savedService } from '../services/saved'
 import { ApiError } from '../services/api'
 
 function formatDeadline(deadline: string | null | undefined): { label: string; color: string } | null {
@@ -38,6 +39,8 @@ export default function InternshipDetails() {
   const [applyError, setApplyError] = useState('')
   const [applyLoading, setApplyLoading] = useState(false)
   const [applied, setApplied] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
+  const [saveLoading, setSaveLoading] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -46,6 +49,27 @@ export default function InternshipDetails() {
       .catch(() => setError('Internship not found.'))
       .finally(() => setLoading(false))
   }, [id])
+
+  useEffect(() => {
+    if (!id || user?.role !== 'applicant') return
+    savedService.getIds().then((ids) => setIsSaved(ids.includes(Number(id)))).catch(() => {})
+  }, [id, user])
+
+  const handleToggleSave = async () => {
+    if (!id) return
+    setSaveLoading(true)
+    try {
+      if (isSaved) {
+        await savedService.unsave(Number(id))
+        setIsSaved(false)
+      } else {
+        await savedService.save(Number(id))
+        setIsSaved(true)
+      }
+    } catch { /* silent */ } finally {
+      setSaveLoading(false)
+    }
+  }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -133,9 +157,15 @@ export default function InternshipDetails() {
         </button>
 
         <div className="bg-white rounded-lg shadow-md p-8">
-          <div className="flex items-start justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">{internship.title}</h1>
+              <Link
+                to={`/company/${internship.posted_by}`}
+                className="text-blue-600 hover:underline text-sm mt-1 inline-block"
+              >
+                View Company Profile →
+              </Link>
               <p className="text-gray-600 mt-1">{internship.location}</p>
               <p className="text-sm text-gray-500 mt-1">
                 {internship.job_type}
@@ -149,26 +179,42 @@ export default function InternshipDetails() {
                 </p>
               )}
             </div>
-            {user?.role === 'applicant' && (
-              <div>
-                {applied ? (
-                  <span className="px-4 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium">
-                    ✓ Applied
-                  </span>
-                ) : deadlinePassed ? (
-                  <span className="px-4 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-medium">
-                    Applications closed
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => setShowApply(true)}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                  >
-                    Apply Now
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="flex flex-col items-end gap-2">
+              {user?.role === 'applicant' && (
+                <button
+                  onClick={handleToggleSave}
+                  disabled={saveLoading}
+                  title={isSaved ? 'Remove bookmark' : 'Save internship'}
+                  className={`p-2 rounded-full border transition ${
+                    isSaved
+                      ? 'bg-yellow-50 border-yellow-300 text-yellow-500 hover:bg-yellow-100'
+                      : 'border-gray-300 text-gray-400 hover:text-yellow-500 hover:border-yellow-300'
+                  }`}
+                >
+                  {isSaved ? '★' : '☆'}
+                </button>
+              )}
+              {user?.role === 'applicant' && (
+                <div>
+                  {applied ? (
+                    <span className="px-4 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium">
+                      ✓ Applied
+                    </span>
+                  ) : deadlinePassed ? (
+                    <span className="px-4 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-medium">
+                      Applications closed
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setShowApply(true)}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    >
+                      Apply Now
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Resume warning (shown after modal closes if upload failed) */}

@@ -8,7 +8,6 @@ import { ApiError } from '../services/api'
 import { useToast } from '../context/ToastContext'
 import { parseAndNormaliseSkills } from '../utils/skillAliases'
 
-
 // Profile Completion Bar
 interface CompletionBarProps {
   percentage: number
@@ -188,6 +187,8 @@ export function Account() {
   const [showCompletion, setShowCompletion] = useState(true)
 
   // Shared fields
+  const [avatarUrl, setAvatarUrl] = useState('')
+  const [avatarUploading, setAvatarUploading] = useState(false)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [gender, setGender] = useState('')
@@ -209,17 +210,19 @@ export function Account() {
   const [gpa, setGpa] = useState('')
   const [skills, setSkills] = useState('')
   const [portfolioUrl, setPortfolioUrl] = useState('')
-  const [languagesSpoken, setLanguagesSpoken] = useState('')   // comma-separated display string
-  const [hobbies, setHobbies] = useState('')                   // comma-separated display string
+  const [languagesSpoken, setLanguagesSpoken] = useState('')
+  const [hobbies, setHobbies] = useState('')
 
   // Recruiter-only
   const [companyName, setCompanyName] = useState('')
   const [jobTitle, setJobTitle] = useState('')
   const [department, setDepartment] = useState('')
+  const [companyWebsite, setCompanyWebsite] = useState('')
+  const [companyLogoUrl, setCompanyLogoUrl] = useState('')
+  const [logoUploading, setLogoUploading] = useState(false)
 
   // Field-level validation errors
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-
   const [snapshot, setSnapshot] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -234,6 +237,7 @@ export function Account() {
       .then((p) => {
         if (isApplicant) {
           const ap = p as Awaited<ReturnType<typeof profileService.getApplicantProfile>>
+          setAvatarUrl(ap.avatar_url ?? '')
           setFirstName(ap.first_name ?? '')
           setLastName(ap.last_name ?? '')
           setGender(ap.gender ?? '')
@@ -258,6 +262,7 @@ export function Account() {
           setCompletionPct(ap.profile_completion_percentage ?? 0)
         } else {
           const rp = p as Awaited<ReturnType<typeof profileService.getRecruiterProfile>>
+          setAvatarUrl(rp.avatar_url ?? '')
           setFirstName(rp.first_name ?? '')
           setLastName(rp.last_name ?? '')
           setGender(rp.gender ?? '')
@@ -267,6 +272,8 @@ export function Account() {
           setCompanyName(rp.company_name ?? '')
           setJobTitle(rp.job_title ?? '')
           setDepartment(rp.department ?? '')
+          setCompanyWebsite(rp.company_website ?? '')
+          setCompanyLogoUrl(rp.company_logo_url ?? '')
           setCompletionPct(rp.profile_completion_percentage ?? 0)
         }
       })
@@ -279,7 +286,7 @@ export function Account() {
       firstName, lastName, gender, headline, bio, phone, linkedinUrl, githubUrl,
       dob, city, state, country, educationLevel, degreeName, universityName,
       graduationYear, gpa, skills, portfolioUrl, languagesSpoken, hobbies,
-      companyName, jobTitle, department,
+      companyName, jobTitle, department, companyWebsite,
     })
   }
 
@@ -308,6 +315,7 @@ export function Account() {
     setCompanyName(snapshot.companyName ?? '')
     setJobTitle(snapshot.jobTitle ?? '')
     setDepartment(snapshot.department ?? '')
+    setCompanyWebsite(snapshot.companyWebsite ?? '')
   }
 
   const handleEdit = () => { takeSnapshot(); setIsEditing(true); setSuccessMsg(''); setError(''); setFieldErrors({}) }
@@ -329,6 +337,8 @@ export function Account() {
     } else {
       const liErr = validateUrl(linkedinUrl, 'LinkedIn URL')
       if (liErr) errors.linkedinUrl = liErr
+      const cwErr = validateUrl(companyWebsite, 'Company Website')
+      if (cwErr) errors.companyWebsite = cwErr
     }
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
@@ -387,6 +397,7 @@ export function Account() {
           company_name: companyName || null,
           job_title: jobTitle || null,
           department: department || null,
+          company_website: companyWebsite || null,
         }
         const updated = await profileService.updateRecruiterProfile(payload)
         setCompletionPct(updated.profile_completion_percentage ?? 0)
@@ -413,6 +424,58 @@ export function Account() {
       toastError(err instanceof ApiError ? err.message : 'Failed to delete account.')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      toastError('Avatar must be under 5 MB.')
+      return
+    }
+
+    const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+    if (!allowed.includes(file.type)) {
+      toastError('Only PNG, JPEG, WebP, or GIF allowed.')
+      return
+    }
+
+    setAvatarUploading(true)
+
+    try {
+      const res = isApplicant
+        ? await profileService.uploadApplicantAvatar(file)
+        : await profileService.uploadRecruiterAvatar(file)
+
+      setAvatarUrl(res.avatar_url ?? '')
+      toastSuccess('Avatar uploaded!')
+      window.dispatchEvent(new Event('avatarUpdated'))
+    } catch {
+      toastError('Failed to upload avatar.')
+    } finally {
+      setAvatarUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) { toastError('Logo must be under 2 MB.'); return }
+    const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+    if (!allowed.includes(file.type)) { toastError('Only PNG, JPEG, WebP, or GIF allowed.'); return }
+    setLogoUploading(true)
+    try {
+      const res = await profileService.uploadCompanyLogo(file)
+      setCompanyLogoUrl(res.company_logo_url ?? '')
+      toastSuccess('Logo uploaded!')
+    } catch {
+      toastError('Failed to upload logo.')
+    } finally {
+      setLogoUploading(false)
+      e.target.value = ''
     }
   }
 
@@ -444,7 +507,28 @@ export function Account() {
 
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
-              <DefaultAvatar size="lg" initials={getInitials()} />
+              <div className="relative">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="avatar"
+                    className="w-30 h-30 rounded-full object-cover border border-gray-200"
+                  />
+                ) : (
+                  <DefaultAvatar size="lg" initials={getInitials()} />
+                )}
+                {isEditing && (
+                  <label className={`absolute bottom-0 right-0 cursor-pointer bg-white border border-gray-300 rounded-full p-1 text-xs hover:bg-gray-100 ${avatarUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {avatarUploading ? '...' : '✎'}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      className="hidden"
+                      onChange={handleAvatarUpload}
+                    />
+                  </label>
+                )}
+              </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
                   {firstName || 'Your'} {lastName || 'Profile'}
@@ -477,7 +561,7 @@ export function Account() {
 
           {/* Shared fields */}
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>First Name</label>
                 <input disabled={!isEditing} value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputClass()} />
@@ -489,7 +573,7 @@ export function Account() {
             </div>
 
             {/* Gender - shared between applicant and recruiter */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>Gender</label>
                 <select
@@ -536,7 +620,7 @@ export function Account() {
                 className={inputClass()} rows={3} placeholder="A brief intro about yourself…" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>Phone</label>
                 <input disabled={!isEditing} value={phone} onChange={(e) => setPhone(e.target.value)}
@@ -561,7 +645,7 @@ export function Account() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>LinkedIn URL</label>
                 <input disabled={!isEditing} value={linkedinUrl} onChange={(e) => setLinkedinUrl(e.target.value)}
@@ -583,7 +667,7 @@ export function Account() {
               <>
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-sm font-semibold text-gray-700 mb-3">Education</p>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className={labelClass}>Education Level</label>
                       <input disabled={!isEditing} value={educationLevel} onChange={(e) => setEducationLevel(e.target.value)} className={inputClass()} />
@@ -668,9 +752,9 @@ export function Account() {
 
             {/* Recruiter-specific */}
             {!isApplicant && (
-              <div className="pt-2 border-t border-gray-100">
-                <p className="text-sm font-semibold text-gray-700 mb-3">Work Details</p>
-                <div className="grid grid-cols-2 gap-4">
+              <div className="pt-2 border-t border-gray-100 space-y-4">
+                <p className="text-sm font-semibold text-gray-700">Work Details</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={labelClass}>Company Name</label>
                     <input disabled={!isEditing} value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass()} />
@@ -683,6 +767,47 @@ export function Account() {
                     <label className={labelClass}>Department</label>
                     <input disabled={!isEditing} value={department} onChange={(e) => setDepartment(e.target.value)} className={inputClass()} />
                   </div>
+                  <div>
+                    <label className={labelClass}>Company Website</label>
+                    <input
+                      disabled={!isEditing}
+                      value={companyWebsite}
+                      onChange={(e) => setCompanyWebsite(e.target.value)}
+                      className={inputClass('companyWebsite')}
+                      placeholder="https://yourcompany.com"
+                    />
+                    {fieldError('companyWebsite')}
+                  </div>
+                </div>
+
+                {/* Company Logo */}
+                <div>
+                  <label className={labelClass}>Company Logo</label>
+                  {companyLogoUrl && (
+                    <div className="mt-2 mb-3">
+                      <img
+                        src={companyLogoUrl}
+                        alt="Company logo"
+                        className="h-16 w-16 object-contain rounded-lg border border-gray-200 bg-gray-50"
+                      />
+                    </div>
+                  )}
+                  <div className="flex items-center gap-3 mt-1">
+                    <label className={`cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition ${logoUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                      {logoUploading ? 'Uploading…' : companyLogoUrl ? 'Change Logo' : 'Upload Logo'}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        className="hidden"
+                        disabled={logoUploading}
+                        onChange={handleLogoUpload}
+                      />
+                    </label>
+                    {companyLogoUrl && !logoUploading && (
+                      <span className="text-xs text-green-600">✓ Logo set</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">PNG/JPEG/WebP/GIF, max 2 MB. Visible on your company profile page.</p>
                 </div>
               </div>
             )}
