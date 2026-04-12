@@ -255,21 +255,23 @@ Admin accounts use the `recruiter` role internally but have the `is_admin` flag 
 ### Applicants
 - Register with OTP email verification, build a profile with skills, education, links, and a profile picture.
 - Browse and search internship listings, save listings for later.
+- Search saved internships by title directly from the dashboard.
 - Apply with a cover letter and resume (PDF/DOCX upload).
-- Track application statuses and chat with the recruiter directly from the application page.
+- Track application statuses with title search, and chat with the recruiter directly from the application page.
 
 ### Recruiters
 - Build a recruiter profile with a personal avatar and company logo.
 - Post, edit, and manage internship listings (including stipend amounts in INR).
-- View all applicants for a listing, review their profiles, and accept, reject, or move applications.
+- Search own listings by title from the recruiter dashboard.
+- View all applicants for a listing, search applicants by name or email, and accept, reject, or move applications.
 - Chat with applicants directly from the application page.
 - A public company profile page (`/company/:id`) is automatically available once a recruiter profile is set up.
 
 ### Admin
 - Access the admin dashboard at `/admin` (requires `is_admin` flag).
 - View platform-wide stats (total users, internships, applications).
-- Browse, search, and manage all users — ban or unban accounts.
-- Browse, search, toggle active status, or remove any internship listing.
+- Browse and search all users by email/role, or look up a specific user by ID — ban or unban accounts.
+- Browse and search all internship listings by title or ID, filter by status (active, inactive, deleted), toggle active status, or remove listings.
 
 ### General
 - Profile completion percentage tracked and displayed for both applicants and recruiters.
@@ -306,28 +308,28 @@ Admin accounts use the `recruiter` role internally but have the `is_admin` flag 
 | GET | `/company/{user_id}` | None | Public company profile page data |
 | GET | `/internships` | None | List active internships with filters |
 | POST | `/internships` | JWT (recruiter) | Create a new internship posting |
-| GET | `/internships/mine` | JWT (recruiter) | List own internship postings |
+| GET | `/internships/mine` | JWT (recruiter) | List own internship postings; supports `search` query param |
 | GET | `/internships/{id}` | None | Get a single internship by ID |
 | PUT | `/internships/{id}` | JWT (recruiter) | Update an internship posting |
 | DELETE | `/internships/{id}` | JWT (recruiter) | Soft-delete an internship posting |
 | POST | `/applications` | JWT (applicant) | Apply for an internship |
-| GET | `/applications/mine` | JWT (applicant) | List own applications |
-| GET | `/applications/internship/{id}` | JWT (recruiter) | List all applicants for a posting |
+| GET | `/applications/mine` | JWT (applicant) | List own applications; supports `search` (internship title) query param |
+| GET | `/applications/internship/{id}` | JWT (recruiter) | List all applicants for a posting; supports `search` (name/email) query param |
 | GET | `/applications/{id}` | JWT | Get a single application |
 | PATCH | `/applications/{id}/status` | JWT | Update application status (accept / reject / withdraw) |
 | POST | `/applications/{id}/resume` | JWT (applicant) | Upload a resume for an application |
 | GET | `/chat/{application_id}` | JWT | Get messages for an application |
 | POST | `/chat/{application_id}` | JWT | Send a message for an application |
-| GET | `/saved` | JWT (applicant) | List saved internships (paginated) |
+| GET | `/saved` | JWT (applicant) | List saved internships; supports `search` (title) query param |
 | POST | `/saved` | JWT (applicant) | Save an internship |
 | DELETE | `/saved/{internship_id}` | JWT (applicant) | Remove a saved internship |
 | GET | `/saved/ids` | JWT (applicant) | Get IDs of all saved internships |
 | POST | `/admin/register` | None (invite secret) | Create an admin account |
 | GET | `/admin/stats` | JWT (admin) | Platform-wide statistics |
-| GET | `/admin/users` | JWT (admin) | List / search all users |
+| GET | `/admin/users` | JWT (admin) | List/search users; supports `search`, `role`, and `user_id` query params |
 | PATCH | `/admin/users/{user_id}/ban` | JWT (admin) | Ban a user |
 | PATCH | `/admin/users/{user_id}/unban` | JWT (admin) | Unban a user |
-| GET | `/admin/internships` | JWT (admin) | List / search all internships |
+| GET | `/admin/internships` | JWT (admin) | List/search internships; supports `search`, `internship_id`, `status`, and `include_deleted` query params |
 | DELETE | `/admin/internships/{id}` | JWT (admin) | Remove an internship |
 | PATCH | `/admin/internships/{id}/toggle` | JWT (admin) | Toggle internship active status |
 | POST | `/contact` | None | Submit a contact message |
