@@ -4,9 +4,9 @@ InternMatch is a full-stack web platform that connects students and fresh gradua
 
 ## Tech Stack
 
-**Backend** — FastAPI, SQLAlchemy, PostgreSQL, PyJWT (EdDSA), Passlib (Argon2), Gmail (OTP email), Supabase (file storage)
+**Backend** - FastAPI, SQLAlchemy, PostgreSQL, PyJWT (EdDSA), Passlib (Argon2), Gmail (OTP email), Supabase (file storage), SlowAPI (rate limiting)
 
-**Frontend** — React, TypeScript, Vite, Tailwind CSS, React Router
+**Frontend** - React, TypeScript, Vite, Tailwind CSS, React Router
 
 ---
 
@@ -17,18 +17,20 @@ InternMatch/
 ├── backend/
 │   ├── app/
 │   │   ├── api/          # Route handlers
-│   │   ├── core/         # Config, security (JWT, hashing)
+│   │   ├── core/         # Config, security (JWT, hashing), rate limiter, Supabase client
 │   │   ├── database/     # SQLAlchemy session
 │   │   ├── models/       # Database models
 │   │   ├── schemas/      # Pydantic request/response schemas
-│   │   └── utils/        # OTP, email, file validation
+│   │   └── utils/        # OTP, email, file validation, profile completion
 │   ├── create_tables.py
 │   ├── requirements.txt
 │   └── .env.example
 └── frontend/
+    ├── public/
+    │   └── sw.js         # Service worker (PWA offline support)
     ├── src/
-    │   ├── components/   # Navbar, Footer, shared UI
-    │   ├── context/      # AuthContext, useAuth
+    │   ├── components/   # Navbar, Footer, shared UI, ChatModal, ApplyModal
+    │   ├── context/      # AuthContext, useAuth, ToastContext
     │   ├── pages/        # All page components
     │   ├── services/     # API client and service modules
     │   └── utils/        # ProtectedRoute, skill helpers
@@ -41,10 +43,10 @@ InternMatch/
 
 - Python 3.10 or higher
 - pip
-- A database — PostgreSQL is recommended, but SQLite works with no extra setup for local development
+- A database - PostgreSQL is recommended, but SQLite works with no extra setup for local development
 - Node.js 18 or higher
 - npm
-- A Supabase project with a storage bucket (used for resume uploads)
+- A Supabase project with a storage bucket (used for resume uploads, profile pictures, and company logos)
 - A Gmail account with an App Password enabled (used for OTP emails)
 
 ---
@@ -206,9 +208,14 @@ npm run dev
 | `GMAIL_USER` | Yes | - | Gmail address used to send OTP emails |
 | `GMAIL_APP_PASS` | Yes | - | 16-digit Gmail App Password |
 | `MAX_UPLOAD_BYTES` | No | `5242880` | Maximum resume file size in bytes (default 5 MB) |
+| `MAX_AVATAR_BYTES` | No | `5242880` | Maximum profile picture / logo file size in bytes (default 5 MB) |
 | `SUPABASE_URL` | Yes | - | Supabase project data API URL |
 | `SUPABASE_KEY` | Yes | - | Supabase API key |
-| `SUPABASE_BUCKET` | Yes | - | Supabase storage bucket name for resumes |
+| `SUPABASE_BUCKET` | Yes | - | Supabase storage bucket name (holds resumes, avatars, and logos) |
+| `STORAGE_RESUMES_PREFIX` | No | `resumes` | Folder prefix inside the bucket for resumes |
+| `STORAGE_AVATARS_PREFIX` | No | `avatars` | Folder prefix inside the bucket for profile pictures |
+| `STORAGE_LOGOS_PREFIX` | No | `logos` | Folder prefix inside the bucket for company logos |
+| `ADMIN_INVITE_SECRET` | No | - | Secret used by the `/admin/register` endpoint to create admin accounts. Generate with `openssl rand -hex 32`. Set to `disabled` once all admin accounts are created. |
 
 ### Frontend (`frontend/.env`)
 
@@ -218,13 +225,67 @@ npm run dev
 
 ---
 
+## Supabase Storage Setup
+
+The platform uses a **single Supabase bucket** for all file uploads. Inside that bucket, files are organised into three folders: `resumes/`, `avatars/`, and `logos/`. You can change the folder names via the `STORAGE_*_PREFIX` env vars.
+
+To set it up:
+1. Create a new bucket in your Supabase dashboard (e.g. `internmatch`).
+2. Make the bucket **public** so uploaded files can be served directly as URLs.
+3. Set `SUPABASE_BUCKET=internmatch` (or whatever you named it) in your `.env`.
+
+---
+
+## Admin Accounts
+
+Admin accounts have access to the admin dashboard where they can view platform stats, manage users (ban/unban), and manage internship listings.
+
+To create the first admin account:
+
+1. Set `ADMIN_INVITE_SECRET` to a strong random string in your `.env` (generate one with `openssl rand -hex 32`).
+2. Navigate to `/admin/register` in the frontend, or POST to `/admin/register` directly, and supply the invite secret along with the email and password.
+3. Once all admin accounts are created, set `ADMIN_INVITE_SECRET=disabled` to close the endpoint.
+
+Admin accounts use the `recruiter` role internally but have the `is_admin` flag set, which unlocks the admin dashboard in the UI.
+
+---
+
+## Features Overview
+
+### Applicants
+- Register with OTP email verification, build a profile with skills, education, links, and a profile picture.
+- Browse and search internship listings, save listings for later.
+- Apply with a cover letter and resume (PDF/DOCX upload).
+- Track application statuses and chat with the recruiter directly from the application page.
+
+### Recruiters
+- Build a recruiter profile with a personal avatar and company logo.
+- Post, edit, and manage internship listings (including stipend amounts in INR).
+- View all applicants for a listing, review their profiles, and accept, reject, or move applications.
+- Chat with applicants directly from the application page.
+- A public company profile page (`/company/:id`) is automatically available once a recruiter profile is set up.
+
+### Admin
+- Access the admin dashboard at `/admin` (requires `is_admin` flag).
+- View platform-wide stats (total users, internships, applications).
+- Browse, search, and manage all users — ban or unban accounts.
+- Browse, search, toggle active status, or remove any internship listing.
+
+### General
+- Profile completion percentage tracked and displayed for both applicants and recruiters.
+- Rate limiting on sensitive endpoints (login, password change, etc.) via SlowAPI.
+- PWA-ready: a service worker (`public/sw.js`) enables basic offline support.
+- Toast notification system for feedback across the UI.
+
+---
+
 ## API Overview
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/` | None | Health check |
-| POST | `/auth/register` | None | Step 1 of registration — sends OTP to email |
-| POST | `/auth/verify-otp` | None | Step 2 — verifies OTP and creates account |
+| POST | `/auth/register` | None | Step 1 of registration - sends OTP to email |
+| POST | `/auth/verify-otp` | None | Step 2 - verifies OTP and creates account |
 | POST | `/auth/resend-otp` | None | Resend OTP for registration or password reset |
 | POST | `/auth/login` | None | Login, returns access and refresh tokens |
 | POST | `/auth/refresh` | None | Refresh access token |
@@ -235,10 +296,14 @@ npm run dev
 | POST | `/users/me/change-password` | JWT | Change account password |
 | GET | `/applicant/profile` | JWT (applicant) | Get own applicant profile |
 | PUT | `/applicant/profile` | JWT (applicant) | Update own applicant profile |
+| POST | `/applicant/profile/avatar` | JWT (applicant) | Upload profile picture |
 | DELETE | `/applicant/profile` | JWT (applicant) | Soft-delete own applicant profile |
 | GET | `/applicant/profile/{user_id}` | JWT (recruiter) | View an applicant's profile by user ID |
 | GET | `/recruiter/profile` | JWT (recruiter) | Get own recruiter profile |
 | PUT | `/recruiter/profile` | JWT (recruiter) | Update own recruiter profile |
+| POST | `/recruiter/profile/avatar` | JWT (recruiter) | Upload recruiter profile picture |
+| POST | `/recruiter/profile/logo` | JWT (recruiter) | Upload company logo |
+| GET | `/company/{user_id}` | None | Public company profile page data |
 | GET | `/internships` | None | List active internships with filters |
 | POST | `/internships` | JWT (recruiter) | Create a new internship posting |
 | GET | `/internships/mine` | JWT (recruiter) | List own internship postings |
@@ -251,4 +316,18 @@ npm run dev
 | GET | `/applications/{id}` | JWT | Get a single application |
 | PATCH | `/applications/{id}/status` | JWT | Update application status (accept / reject / withdraw) |
 | POST | `/applications/{id}/resume` | JWT (applicant) | Upload a resume for an application |
+| GET | `/chat/{application_id}` | JWT | Get messages for an application |
+| POST | `/chat/{application_id}` | JWT | Send a message for an application |
+| GET | `/saved` | JWT (applicant) | List saved internships (paginated) |
+| POST | `/saved` | JWT (applicant) | Save an internship |
+| DELETE | `/saved/{internship_id}` | JWT (applicant) | Remove a saved internship |
+| GET | `/saved/ids` | JWT (applicant) | Get IDs of all saved internships |
+| POST | `/admin/register` | None (invite secret) | Create an admin account |
+| GET | `/admin/stats` | JWT (admin) | Platform-wide statistics |
+| GET | `/admin/users` | JWT (admin) | List / search all users |
+| PATCH | `/admin/users/{user_id}/ban` | JWT (admin) | Ban a user |
+| PATCH | `/admin/users/{user_id}/unban` | JWT (admin) | Unban a user |
+| GET | `/admin/internships` | JWT (admin) | List / search all internships |
+| DELETE | `/admin/internships/{id}` | JWT (admin) | Remove an internship |
+| PATCH | `/admin/internships/{id}/toggle` | JWT (admin) | Toggle internship active status |
 | POST | `/contact` | None | Submit a contact message |
