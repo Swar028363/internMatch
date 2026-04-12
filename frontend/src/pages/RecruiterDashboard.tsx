@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { internshipService } from '../services/internships'
-import type { Internship, PaginatedInternships } from '../services/internships'
+import type { PaginatedInternships } from '../services/internships'
 import { ApiError } from '../services/api'
 import { useToast } from '../context/ToastContext'
 import { Pagination } from '../components/Pagination'
