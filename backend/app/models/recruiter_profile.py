@@ -40,28 +40,22 @@ class RecruiterProfile(Base):
     # Contact
     phone_number = Column(String)
 
-    # Social
+    # Social / web
     linkedin_url = Column(String)
+    company_website = Column(String)
+
+    # Media
+    avatar_url = Column(String)        # personal profile picture
+    company_logo_url = Column(String)  # company / brand logo
 
     # System
     profile_completed = Column(Boolean, default=False, nullable=False)
     profile_completion_percentage = Column(Integer, default=0, nullable=False)
     is_deleted = Column(Boolean, default=False, nullable=False)
 
-    created_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    updated_at = Column(
-        DateTime(timezone=True),
-        onupdate=func.now(),
-    )
-    last_active_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    last_active_at = Column(DateTime(timezone=True), server_default=func.now())
     deleted_at = Column(DateTime(timezone=True))
 
     user = relationship("User")
-    

@@ -20,6 +20,7 @@ class User(Base):
     role = Column(SAEnum(Role), nullable=False)
 
     is_deleted = Column(Boolean, default=False, nullable=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(
         DateTime(timezone=True),

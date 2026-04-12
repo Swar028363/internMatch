@@ -6,6 +6,8 @@ from app.models.recruiter_profile import RecruiterProfile
 from app.models.internship import Internship
 from app.models.application import Application
 from app.models.contact import ContactMessage
+from app.models.saved_internship import SavedInternship
+from app.models.message import Message
 
 print("Creating database tables...")
 Base.metadata.create_all(bind=engine)

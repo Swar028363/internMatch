@@ -62,23 +62,16 @@ class ApplicantProfile(Base):
     github_url = Column(String)
     linkedin_url = Column(String)
 
+    # Media
+    avatar_url = Column(String)   # profile picture - stored in Supabase avatars/ folder
+
     # System
     is_deleted = Column(Boolean, default=False, nullable=False)
     profile_completed = Column(Boolean, default=False, nullable=False)
     profile_completion_percentage = Column(Integer, default=0, nullable=False)
 
-    created_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    updated_at = Column(
-        DateTime(timezone=True),
-        onupdate=func.now(),
-    )
-    last_active_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    last_active_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", backref="applicant_profile", uselist=False)
