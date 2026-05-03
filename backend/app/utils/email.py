@@ -13,7 +13,11 @@ def _send_email(to_email: str, subject: str, body: str) -> None:
     msg["From"] = GMAIL_USER
     msg["To"] = to_email
     msg.attach(MIMEText(body, "html"))
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+    
+    # Changed from SMTP_SSL port 465 to SMTP with STARTTLS port 587
+    # Port 587 is more reliable on cloud platforms like Render
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()  # Upgrade to secure connection
         server.login(GMAIL_USER, GMAIL_PASS)
         server.sendmail(GMAIL_USER, to_email, msg.as_string())
 
@@ -81,12 +85,10 @@ def send_status_change_email(
     except Exception as e:
         logger.error("Failed to send status-change email to %s: %s", to_email, str(e))
 
-logger = logging.getLogger(__name__)
-
 
 def send_otp_email(to_email: str, otp: str, purpose: str = "verify") -> None:
     """
-    Send an OTP email via Resend.
+    Send an OTP email via Gmail SMTP.
     Raises Exception on failure - callers should handle it.
     """
     if purpose == "reset":
